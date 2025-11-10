@@ -1,0 +1,25 @@
+server:
+  port: 7081
+
+spring:
+  application:
+    name: biometric-algo
+
+# Hazelcast配置
+hazelcast:
+  cluster:
+    name: biometric-cluster
+  port: 5701
+  members: 127.0.0.1  # 多节点时配置为: 192.168.1.10,192.168.1.11,192.168.1.12
+
+# 人脸识别参数
+face:
+  recognition:
+    threshold: 0.6  # 匹配阈值，相似度大于此值认为匹配成功
+    topN: 10  # 返回前N个最匹配的结果
+
+logging:
+  level:
+    com.biometric.algo: INFO
+    com.hazelcast: WARN
+
