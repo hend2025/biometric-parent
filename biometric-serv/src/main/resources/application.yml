@@ -39,7 +39,12 @@ mybatis-plus:
 # 算法服务配置
 biometric:
   algo:
-    url: http://localhost:8081
+    url: http://127.0.0.1:7081
+  # 人脸特征加载配置
+  face:
+    autoload: true  # 是否在启动时自动加载人脸特征到 Hazelcast
+    load:
+      delay: 5000  # 启动延迟加载时间（毫秒），确保算法服务已准备好
 
 logging:
   level:

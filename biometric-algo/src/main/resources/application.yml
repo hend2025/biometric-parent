@@ -9,8 +9,9 @@ spring:
 hazelcast:
   cluster:
     name: biometric-cluster
-  port: 5701
-  members: 127.0.0.1  # 多节点时配置为: 192.168.1.10,192.168.1.11,192.168.1.12
+  port: 5702
+  members: 192.168.57.100,192.168.57.225
+
 
 # 人脸识别参数
 face:

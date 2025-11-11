@@ -32,12 +32,8 @@ public class FaceRecognitionController {
         String imageUrl = (String) request.get("imageUrl");
         
         // 这里假设前端传入的是特征向量数组
-        List<Number> featureList = (List<Number>) request.get("featureVector");
-        float[] featureVector = new float[featureList.size()];
-        for (int i = 0; i < featureList.size(); i++) {
-            featureVector[i] = featureList.get(i).floatValue();
-        }
-        
+        byte[] featureVector = (byte[]) request.get("featureVector");
+
         String faceId = faceRecognitionService.addFaceFeature(userId, featureVector, imageUrl);
         
         Map<String, Object> response = new HashMap<>();
@@ -82,11 +78,8 @@ public class FaceRecognitionController {
      */
     @PostMapping("/recognize")
     public ResponseEntity<Map<String, Object>> recognizeFace(@RequestBody Map<String, Object> request) {
-        List<Number> featureList = (List<Number>) request.get("featureVector");
-        float[] featureVector = new float[featureList.size()];
-        for (int i = 0; i < featureList.size(); i++) {
-            featureVector[i] = featureList.get(i).floatValue();
-        }
+
+        String featureVector = (String) request.get("featureVector");
         
         List<FaceMatchResult> results = faceRecognitionService.recognizeFace(featureVector);
         
@@ -104,13 +97,9 @@ public class FaceRecognitionController {
     @PostMapping("/verify")
     public ResponseEntity<Map<String, Object>> verifyFace(@RequestBody Map<String, Object> request) {
         Long userId = Long.valueOf(request.get("userId").toString());
-        
-        List<Number> featureList = (List<Number>) request.get("featureVector");
-        float[] featureVector = new float[featureList.size()];
-        for (int i = 0; i < featureList.size(); i++) {
-            featureVector[i] = featureList.get(i).floatValue();
-        }
-        
+
+        byte[] featureVector = (byte[]) request.get("featureVector");
+
         FaceMatchResult result = faceRecognitionService.verifyFace(userId, featureVector);
         
         Map<String, Object> response = new HashMap<>();

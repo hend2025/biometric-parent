@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.biometric.serv.dto.FaceRecognitionDTO;
 import com.biometric.serv.dto.FaceRegisterDTO;
 import com.biometric.serv.dto.FaceVerificationDTO;
+import com.biometric.serv.entity.BosgFaceFturD;
 import com.biometric.serv.entity.FaceRecord;
 import com.biometric.serv.entity.RecognitionLog;
+import com.biometric.serv.mapper.BosgFaceFturDMapper;
 import com.biometric.serv.service.BiometricService;
 import com.biometric.serv.service.RecognitionLogService;
 import com.biometric.serv.vo.ResultVO;
@@ -30,6 +32,9 @@ public class BiometricController {
 
     @Autowired
     private RecognitionLogService recognitionLogService;
+
+    @Autowired
+    private BosgFaceFturDMapper bosgFaceFturDMapper;
 
     /**
      * 注册人脸
@@ -77,8 +82,12 @@ public class BiometricController {
      * 1:N人脸识别
      */
     @PostMapping("/face/recognize")
-    public ResultVO<Map<String, Object>> recognizeFace(@Validated @RequestBody FaceRecognitionDTO dto) {
+    public ResultVO<Map<String, Object>> recognizeFace() {
         try {
+            BosgFaceFturD bean = bosgFaceFturDMapper.selectById("345854003557139474");
+            FaceRecognitionDTO dto = new FaceRecognitionDTO();
+            dto.setFeatureVector(bean.getFaceFturData());
+
             Map<String, Object> result = biometricService.recognizeFace(dto);
             return ResultVO.success("识别完成", result);
         } catch (Exception e) {

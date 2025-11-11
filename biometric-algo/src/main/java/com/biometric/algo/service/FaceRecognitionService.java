@@ -2,14 +2,18 @@ package com.biometric.algo.service;
 
 import com.biometric.algo.model.FaceFeature;
 import com.biometric.algo.model.FaceMatchResult;
+import com.biometric.algo.util.Face303JavaCalcuater;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -33,12 +37,19 @@ public class FaceRecognitionService {
     private static final String FACE_FEATURE_MAP = "faceFeatureMap";
 
     /**
-     * 添加人脸特征到分布式缓存
+     * 添加人脸特征到分布式缓存（自动生成 faceId）
      */
-    public String addFaceFeature(Long userId, float[] featureVector, String imageUrl) {
+    public String addFaceFeature(Long userId, byte[] featureVector, String imageUrl) {
+        String faceId = UUID.randomUUID().toString();
+        return addFaceFeatureWithId(faceId, userId, featureVector, imageUrl);
+    }
+
+    /**
+     * 添加人脸特征到分布式缓存（使用指定的 faceId）
+     */
+    public String addFaceFeatureWithId(String faceId, Long userId, byte[] featureVector, String imageUrl) {
         IMap<String, FaceFeature> faceFeatureMap = hazelcastInstance.getMap(FACE_FEATURE_MAP);
         
-        String faceId = UUID.randomUUID().toString();
         FaceFeature faceFeature = new FaceFeature();
         faceFeature.setFaceId(faceId);
         faceFeature.setUserId(userId);
@@ -47,7 +58,7 @@ public class FaceRecognitionService {
         faceFeature.setCreateTime(System.currentTimeMillis());
         
         faceFeatureMap.put(faceId, faceFeature);
-        log.info("Added face feature: faceId={}, userId={}", faceId, userId);
+        log.debug("Added face feature: faceId={}, userId={}", faceId, userId);
         
         return faceId;
     }
@@ -86,20 +97,38 @@ public class FaceRecognitionService {
     /**
      * 1:N人脸识别 - 在所有特征中搜索最匹配的
      */
-    public List<FaceMatchResult> recognizeFace(float[] queryFeatureVector) {
+    public List<FaceMatchResult> recognizeFace(String queryFeatureVector) {
         IMap<String, FaceFeature> faceFeatureMap = hazelcastInstance.getMap(FACE_FEATURE_MAP);
+
+        int featureCount = faceFeatureMap.size();
+        System.out.println("Total face features: " + featureCount);
         
         List<FaceMatchResult> results = new ArrayList<>();
-        
+
+        byte[] featureVector = Base64.getDecoder().decode(queryFeatureVector);
+        int[] bFeat1 =  Face303JavaCalcuater.getBinaFeat(featureVector);
+
+        int HAM_DIST = 283;
+
         // 遍历所有人脸特征进行比对
         for (FaceFeature feature : faceFeatureMap.values()) {
-            double similarity = calculateCosineSimilarity(queryFeatureVector, feature.getFeatureVector());
-            
-            if (similarity >= matchThreshold) {
+            double similarity = calculateCosineSimilarity(featureVector, feature.getFeatureVector());
+
+            int[] bFeat2 = Face303JavaCalcuater.getBinaFeat(feature.getFeatureVector());
+            boolean isSimilar = Face303JavaCalcuater.isBinaFeatSimilar(
+                        bFeat1[0], bFeat1[1], bFeat1[2], bFeat1[3],
+                        bFeat2[0], bFeat2[1], bFeat2[2], bFeat2[3], HAM_DIST
+                    );
+            float similarity2 = 0.0f;
+            if (isSimilar){
+                similarity2 = Face303JavaCalcuater.compare(Face303JavaCalcuater.toFloatArray(featureVector), Face303JavaCalcuater.toFloatArray(feature.getFeatureVector()));
+            }
+
+            if (similarity2 >= matchThreshold) {
                 FaceMatchResult result = new FaceMatchResult();
                 result.setFaceId(feature.getFaceId());
                 result.setUserId(feature.getUserId());
-                result.setSimilarity(similarity);
+                result.setSimilarity(similarity2+0.0);
                 result.setImageUrl(feature.getImageUrl());
                 result.setMatched(true);
                 results.add(result);
@@ -113,14 +142,13 @@ public class FaceRecognitionService {
             results = results.subList(0, topN);
         }
         
-        log.info("Face recognition completed: found {} matches", results.size());
         return results;
     }
 
     /**
      * 1:1人脸验证 - 验证指定用户
      */
-    public FaceMatchResult verifyFace(Long userId, float[] queryFeatureVector) {
+    public FaceMatchResult verifyFace(Long userId, byte[] queryFeatureVector) {
         IMap<String, FaceFeature> faceFeatureMap = hazelcastInstance.getMap(FACE_FEATURE_MAP);
         
         // 获取该用户的所有人脸特征
@@ -160,7 +188,7 @@ public class FaceRecognitionService {
     /**
      * 计算余弦相似度
      */
-    private double calculateCosineSimilarity(float[] vector1, float[] vector2) {
+    private double calculateCosineSimilarity(byte[] vector1, byte[] vector2) {
         if (vector1 == null || vector2 == null || vector1.length != vector2.length) {
             return 0.0;
         }

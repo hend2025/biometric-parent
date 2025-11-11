@@ -29,7 +29,7 @@ public class FaceFeature implements Serializable {
     /**
      * 人脸特征向量（128维或512维）
      */
-    private float[] featureVector;
+    private byte[] featureVector;
 
     /**
      * 图片URL

@@ -11,9 +11,9 @@ import java.util.List;
 @Data
 public class FaceRecognitionDTO {
 
-    @NotNull(message = "特征向量不能为空")
-    private List<Float> featureVector;
+    private byte[] featureVector;
 
     private String queryImageUrl;
+
 }
 
