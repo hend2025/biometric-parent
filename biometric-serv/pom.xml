@@ -16,6 +16,13 @@
     <description>Biometric Service with MySQL and MyBatis Plus</description>
 
     <dependencies>
+        <!-- biometric-algo module -->
+        <dependency>
+            <groupId>com.biometric</groupId>
+            <artifactId>biometric-algo</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- Spring Boot Starter -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -41,10 +48,15 @@
             <version>1.2.6</version>
         </dependency>
 
-        <!-- HTTP Client for calling algo service -->
+        <!-- Hazelcast -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webflux</artifactId>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast-spring</artifactId>
         </dependency>
 
         <!-- Lombok -->

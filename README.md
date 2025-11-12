@@ -6,9 +6,11 @@
 
 ```
 biometric-parent
-├── biometric-algo    # 算法服务（Hazelcast分布式人脸识别）
-└── biometric-serv    # 业务服务（MySQL + MyBatis Plus + RESTful API）
+├── biometric-algo    # 算法库（Hazelcast分布式人脸识别）- 作为 jar 包集成到 serv 中
+└── biometric-serv    # 业务服务（MySQL + MyBatis Plus + RESTful API + 算法服务）
 ```
+
+> **重要变更**: biometric-algo 已经从独立的微服务改为 jar 包库，集成到 biometric-serv 中。现在只需要启动一个服务即可。
 
 ### 技术栈
 
@@ -22,22 +24,20 @@ biometric-parent
 
 ## 模块说明
 
-### biometric-algo（算法服务）
+### biometric-algo（算法库）
 
-提供分布式人脸识别算法能力，基于 Hazelcast 实现多节点部署和负载均衡。
+提供分布式人脸识别算法能力，作为 jar 包集成到 serv 模块中。
 
 **功能特性：**
 - 1:N 人脸识别（在所有人脸库中搜索）
 - 1:1 人脸验证（验证指定用户）
 - 人脸特征管理（添加、删除、查询）
 - 余弦相似度计算
-- 分布式内存存储
-
-**端口**: 8081
+- 分布式内存存储（Hazelcast）
 
 ### biometric-serv（业务服务）
 
-提供完整的人脸识别业务接口，对外提供 RESTful API 服务。
+提供完整的人脸识别业务接口，对外提供 RESTful API 服务。已集成算法库。
 
 **功能特性：**
 - 用户管理（CRUD）
@@ -45,8 +45,11 @@ biometric-parent
 - 人脸识别与验证
 - 识别日志记录
 - 数据持久化
+- 内置算法服务（Hazelcast）
 
-**端口**: 8080
+**端口**: 
+- HTTP 服务: 7082
+- Hazelcast: 5702
 
 ## 快速开始
 
@@ -75,8 +78,6 @@ CREATE DATABASE IF NOT EXISTS biometric DEFAULT CHARACTER SET utf8mb4 COLLATE ut
 
 ### 3. 配置修改
 
-#### biometric-serv 配置
-
 修改 `biometric-serv/src/main/resources/application.yml`：
 
 ```yaml
@@ -86,33 +87,37 @@ spring:
     username: root
     password: your_password  # 修改为你的MySQL密码
 
-# 算法服务地址
-biometric:
-  algo:
-    url: http://localhost:8081  # 如果algo服务部署在其他机器，修改此地址
-```
-
-#### biometric-algo 配置（多节点部署）
-
-修改 `biometric-algo/src/main/resources/application.yml`：
-
-```yaml
-# 单节点部署（默认）
+# Hazelcast配置（多节点部署）
 hazelcast:
-  members: 127.0.0.1
+  cluster:
+    name: biometric-cluster
+  port: 5702
+  members: 192.168.57.100,192.168.57.225  # 配置所有节点的IP
 
-# 多节点部署（配置所有节点的IP）
-hazelcast:
-  members: 192.168.1.10,192.168.1.11,192.168.1.12
+# 人脸识别参数
+face:
+  recognition:
+    threshold: 0.6  # 匹配阈值，相似度大于此值认为匹配成功
+    topN: 10  # 返回前N个最匹配的结果
 ```
 
 ### 4. 编译打包
 
+#### Windows
 ```bash
-# 在项目根目录执行
-mvn clean package
+# 使用提供的批处理脚本
+build.bat
 
-# 跳过测试打包
+# 或手动执行
+mvn clean package -DskipTests
+```
+
+#### Linux/Mac
+```bash
+# 使用提供的Shell脚本
+./build.sh
+
+# 或手动执行
 mvn clean package -DskipTests
 ```
 
@@ -120,32 +125,60 @@ mvn clean package -DskipTests
 
 #### 方式一：IDE 启动（开发环境）
 
-1. 启动算法服务：运行 `biometric-algo/src/main/java/com/biometric/algo/BiometricAlgoApplication.java`
-2. 启动业务服务：运行 `biometric-serv/src/main/java/com/biometric/serv/BiometricServApplication.java`
+运行 `biometric-serv/src/main/java/com/biometric/serv/BiometricServApplication.java`
 
 #### 方式二：命令行启动（生产环境）
 
+##### Windows
 ```bash
-# 启动算法服务（端口8081）
-cd biometric-algo
-java -jar target/biometric-algo-1.0.0.jar
+# 使用批处理脚本
+start-serv.bat
 
-# 启动业务服务（端口8080）
+# 或手动执行
 cd biometric-serv
-java -jar target/biometric-serv-1.0.0.jar
+java -Xmx4g -Xms4g -XX:+UseG1GC -jar target/biometric-serv-1.0.0.jar
 ```
 
-#### 方式三：多节点部署算法服务
+##### Linux/Mac
+```bash
+# 使用Shell脚本
+./start-serv.sh
+
+# 或手动执行
+cd biometric-serv
+java -Xmx4g -Xms4g -XX:+UseG1GC -jar target/biometric-serv-1.0.0.jar
+```
+
+#### 方式三：多节点部署（Hazelcast 集群）
 
 ```bash
-# 节点1（192.168.1.10）
-java -jar biometric-algo-1.0.0.jar --server.port=8081 --hazelcast.members=192.168.1.10,192.168.1.11,192.168.1.12
+# 节点1（192.168.57.100）
+java -jar biometric-serv-1.0.0.jar \
+  --server.port=7082 \
+  --hazelcast.port=5702 \
+  --hazelcast.members=192.168.57.100,192.168.57.225
 
-# 节点2（192.168.1.11）
-java -jar biometric-algo-1.0.0.jar --server.port=8081 --hazelcast.members=192.168.1.10,192.168.1.11,192.168.1.12
+# 节点2（192.168.57.225）
+java -jar biometric-serv-1.0.0.jar \
+  --server.port=7082 \
+  --hazelcast.port=5702 \
+  --hazelcast.members=192.168.57.100,192.168.57.225
+```
 
-# 节点3（192.168.1.12）
-java -jar biometric-algo-1.0.0.jar --server.port=8081 --hazelcast.members=192.168.1.10,192.168.1.11,192.168.1.12
+#### 方式四：Docker Compose 部署
+
+```bash
+# 启动所有服务（包括3个节点的集群 + MySQL）
+docker-compose up -d
+
+# 查看服务状态
+docker-compose ps
+
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
 ```
 
 ## API 文档
@@ -201,7 +234,7 @@ POST /api/biometric/face/register
 Content-Type: application/json
 
 {
-    "userId": 1,
+    "psnNo": 1,
     "featureVector": [0.123, 0.456, ..., 0.789],  // 人脸特征向量（通常为128维或512维）
     "imageUrl": "http://example.com/face.jpg",
     "remark": "正面照"
@@ -214,7 +247,7 @@ POST /api/biometric/face/recognize
 Content-Type: application/json
 
 {
-    "featureVector": [0.123, 0.456, ..., 0.789],
+    "featureVector": [0x12, 0x34, ..., 0x56],  // byte[] 格式的特征向量
     "queryImageUrl": "http://example.com/query.jpg"
 }
 ```
@@ -228,7 +261,7 @@ Content-Type: application/json
         "results": [
             {
                 "faceId": "uuid-xxx",
-                "userId": 1,
+                "psnNo": 1,
                 "similarity": 0.95,
                 "imageUrl": "http://example.com/face.jpg",
                 "matched": true
@@ -246,7 +279,7 @@ POST /api/biometric/face/verify
 Content-Type: application/json
 
 {
-    "userId": 1,
+    "psnNo": 1,
     "featureVector": [0.123, 0.456, ..., 0.789],
     "queryImageUrl": "http://example.com/query.jpg"
 }
@@ -254,7 +287,7 @@ Content-Type: application/json
 
 #### 查询用户的人脸列表
 ```
-GET /api/biometric/face/user/{userId}
+GET /api/biometric/face/user/{psnNo}
 ```
 
 #### 删除人脸
@@ -264,12 +297,12 @@ DELETE /api/biometric/face/{faceId}
 
 #### 删除用户的所有人脸
 ```
-DELETE /api/biometric/face/user/{userId}
+DELETE /api/biometric/face/user/{psnNo}
 ```
 
 #### 查询识别日志
 ```
-GET /api/biometric/log/list?pageNum=1&pageSize=10&userId=1&recognitionType=1
+GET /api/biometric/log/list?pageNum=1&pageSize=10&psnNo=1&recognitionType=1
 ```
 
 参数说明：
@@ -279,7 +312,7 @@ GET /api/biometric/log/list?pageNum=1&pageSize=10&userId=1&recognitionType=1
 
 ### 人脸识别参数调优
 
-在 `biometric-algo/src/main/resources/application.yml` 中配置：
+在 `biometric-serv/src/main/resources/application.yml` 中配置：
 
 ```yaml
 face:
@@ -297,8 +330,8 @@ face:
 hazelcast:
   cluster:
     name: biometric-cluster  # 集群名称，相同集群名称的节点会自动组网
-  port: 5701                # Hazelcast通信端口
-  members: 192.168.1.10,192.168.1.11  # 集群节点列表
+  port: 5702                # Hazelcast通信端口
+  members: 192.168.57.100,192.168.57.225  # 集群节点列表
 ```
 
 ## 性能优化建议
@@ -323,21 +356,15 @@ hazelcast:
 ### JVM 参数建议
 
 ```bash
-# 算法服务（内存密集型）
-java -Xmx4g -Xms4g -XX:+UseG1GC -jar biometric-algo-1.0.0.jar
-
-# 业务服务
-java -Xmx2g -Xms2g -XX:+UseG1GC -jar biometric-serv-1.0.0.jar
+# 业务服务（包含算法服务，内存密集型）
+java -Xmx4g -Xms4g -XX:+UseG1GC -jar biometric-serv-1.0.0.jar
 ```
 
 ### 健康检查
 
 ```bash
-# 检查业务服务
-curl http://localhost:8080/api/user/list
-
-# 检查算法服务
-curl http://localhost:8081/api/algo/face/feature/count
+# 检查服务状态
+curl http://localhost:7082/api/user/list
 ```
 
 ## 常见问题
@@ -347,8 +374,8 @@ curl http://localhost:8081/api/algo/face/feature/count
 **问题**：多个节点启动后无法形成集群
 
 **解决方案**：
-- 检查网络是否互通：`ping 192.168.1.10`
-- 检查防火墙是否开放 5701 端口
+- 检查网络是否互通：`ping 192.168.57.100`
+- 检查防火墙是否开放 5702 端口
 - 确认所有节点配置了相同的 `cluster.name`
 - 检查 `members` 配置是否包含所有节点
 
@@ -374,35 +401,34 @@ curl http://localhost:8081/api/algo/face/feature/count
 
 ```
 biometric-parent/
-├── biometric-algo/                      # 算法服务模块
+├── biometric-algo/                      # 算法库模块
 │   ├── src/main/java/
 │   │   └── com/biometric/algo/
-│   │       ├── BiometricAlgoApplication.java
 │   │       ├── config/
 │   │       │   └── HazelcastConfig.java # Hazelcast配置
-│   │       ├── controller/
-│   │       │   └── FaceRecognitionController.java
 │   │       ├── model/
 │   │       │   ├── FaceFeature.java
 │   │       │   └── FaceMatchResult.java
-│   │       └── service/
-│   │           └── FaceRecognitionService.java
-│   └── src/main/resources/
-│       └── application.yml
+│   │       ├── service/
+│   │       │   └── FaceRecognitionService.java
+│   │       └── util/
+│   │           └── Face303JavaCalcuater.java
+│   └── pom.xml
 │
 ├── biometric-serv/                      # 业务服务模块
 │   ├── src/main/java/
 │   │   └── com/biometric/serv/
 │   │       ├── BiometricServApplication.java
-│   │       ├── config/
-│   │       │   └── WebClientConfig.java
 │   │       ├── controller/
 │   │       │   ├── BiometricController.java
+│   │       │   ├── FaceFeatureLoadController.java
 │   │       │   └── UserController.java
 │   │       ├── dto/                     # 数据传输对象
 │   │       ├── entity/                  # 实体类
 │   │       ├── mapper/                  # MyBatis Mapper
 │   │       ├── service/                 # 业务服务
+│   │       │   ├── BiometricService.java
+│   │       │   └── FaceFeatureLoadService.java
 │   │       └── vo/                      # 视图对象
 │   └── src/main/resources/
 │       ├── application.yml
@@ -410,8 +436,26 @@ biometric-parent/
 │           └── schema.sql               # 数据库建表脚本
 │
 ├── pom.xml                              # 父项目POM
+├── build.bat / build.sh                 # 编译脚本
+├── start-serv.bat / start-serv.sh       # 启动脚本
+├── docker-compose.yml                   # Docker Compose 配置
 └── README.md                            # 项目文档
 ```
+
+## 架构变更历史
+
+### v2.0.0 (当前版本)
+- **重大变更**: 将 biometric-algo 从独立微服务改为 jar 包库
+- biometric-algo 现在作为依赖集成到 biometric-serv 中
+- 简化了部署架构，只需启动一个服务
+- Hazelcast 集群仍然支持多节点部署
+- 移除了 algo 服务的 HTTP Controller 层
+- 服务间不再通过 HTTP 调用，改为直接方法调用，提升性能
+
+### v1.0.0 (历史版本)
+- biometric-algo 作为独立微服务部署
+- biometric-serv 通过 WebClient 调用 algo 服务的 HTTP 接口
+- 需要分别启动两个服务
 
 ## 许可证
 
@@ -420,4 +464,3 @@ MIT License
 ## 联系方式
 
 如有问题，请提交 Issue 或 Pull Request。
-

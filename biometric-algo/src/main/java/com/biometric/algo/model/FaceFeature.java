@@ -22,9 +22,9 @@ public class FaceFeature implements Serializable {
     private String faceId;
 
     /**
-     * 用户ID
+     * 人员ID
      */
-    private Long userId;
+    private String psnNo;
 
     /**
      * 人脸特征向量（128维或512维）
@@ -36,9 +36,5 @@ public class FaceFeature implements Serializable {
      */
     private String imageUrl;
 
-    /**
-     * 创建时间
-     */
-    private Long createTime;
 }
 

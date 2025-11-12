@@ -8,9 +8,9 @@ import org.springframework.scheduling.annotation.EnableAsync;
 /**
  * 生物识别业务服务启动类
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"com.biometric.serv", "com.biometric.algo"})
 @MapperScan("com.biometric.serv.mapper")
-@EnableAsync  // 启用异步支持，用于后台加载人脸特征
+@EnableAsync
 public class BiometricServApplication {
 
     public static void main(String[] args) {

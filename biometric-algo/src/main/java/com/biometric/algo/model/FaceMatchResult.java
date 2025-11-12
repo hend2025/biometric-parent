@@ -24,21 +24,17 @@ public class FaceMatchResult implements Serializable {
     /**
      * 用户ID
      */
-    private Long userId;
+    private String psnNo;
 
     /**
      * 相似度分数（0-1之间）
      */
-    private Double similarity;
-
-    /**
-     * 图片URL
-     */
-    private String imageUrl;
+    private float similarity;
 
     /**
      * 是否匹配成功
      */
     private Boolean matched;
+
 }
 

@@ -36,17 +36,30 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-# 算法服务配置
+# Hazelcast配置
+hazelcast:
+  cluster:
+    name: biometric-cluster
+  port: 5701
+  members: 192.168.57.225,192.168.57.100
+
+# 人脸识别参数
+face:
+  recognition:
+    threshold: 0.6  # 匹配阈值，相似度大于此值认为匹配成功
+    topN: 10  # 返回前N个最匹配的结果
+
+# 生物识别配置
 biometric:
-  algo:
-    url: http://127.0.0.1:7081
   # 人脸特征加载配置
   face:
     autoload: true  # 是否在启动时自动加载人脸特征到 Hazelcast
     load:
-      delay: 5000  # 启动延迟加载时间（毫秒），确保算法服务已准备好
+      delay: 5000  # 启动延迟加载时间（毫秒），确保 Hazelcast 已准备好
 
 logging:
   level:
     com.biometric.serv: INFO
+    com.biometric.algo: INFO
+    com.hazelcast: WARN
 

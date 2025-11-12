@@ -23,7 +23,7 @@ public class HazelcastConfig {
     private String members;
 
     @Bean
-    public Config hazelcastConfiguration() {
+    public HazelcastInstance hazelcastInstance() {
         Config config = new Config();
         config.setClusterName(clusterName);
 
@@ -31,6 +31,7 @@ public class HazelcastConfig {
         NetworkConfig networkConfig = config.getNetworkConfig();
         networkConfig.setPort(port);
         networkConfig.setPortAutoIncrement(true);
+        networkConfig.setPortCount(100);
 
         // 组播配置（禁用）
         JoinConfig joinConfig = networkConfig.getJoin();
@@ -47,6 +48,7 @@ public class HazelcastConfig {
         // 配置分布式Map - 用于存储人脸特征数据
         MapConfig faceFeatureMapConfig = new MapConfig();
         faceFeatureMapConfig.setName("faceFeatureMap");
+        faceFeatureMapConfig.setInMemoryFormat(com.hazelcast.config.InMemoryFormat.BINARY);
         faceFeatureMapConfig.setBackupCount(1);
         faceFeatureMapConfig.setAsyncBackupCount(1);
         faceFeatureMapConfig.setTimeToLiveSeconds(0);
@@ -56,17 +58,12 @@ public class HazelcastConfig {
         EvictionConfig evictionConfig = new EvictionConfig();
         evictionConfig.setEvictionPolicy(EvictionPolicy.LRU);
         evictionConfig.setMaxSizePolicy(MaxSizePolicy.PER_NODE);
-        evictionConfig.setSize(100000);
+        evictionConfig.setSize(10000000);
         faceFeatureMapConfig.setEvictionConfig(evictionConfig);
         
         config.addMapConfig(faceFeatureMapConfig);
 
-        return config;
+        return Hazelcast.newHazelcastInstance(config);
     }
 
-    @Bean
-    public HazelcastInstance hazelcastInstance(Config hazelcastConfiguration) {
-        return Hazelcast.newHazelcastInstance(hazelcastConfiguration);
-    }
 }
-
