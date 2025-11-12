@@ -49,7 +49,6 @@ public class TopNFaceAggregator implements Aggregator<Entry<String, FaceFeature>
 
                 results.offer(result);
                 
-                // 保持只保留topN个结果
                 if (results.size() > topN) {
                     results.poll();
                 }
@@ -75,7 +74,6 @@ public class TopNFaceAggregator implements Aggregator<Entry<String, FaceFeature>
         return finalResults;
     }
     
-    // 可序列化的比较器类
     private static class FaceMatchResultComparator implements Comparator<FaceMatchResult>, Serializable {
         @Override
         public int compare(FaceMatchResult a, FaceMatchResult b) {

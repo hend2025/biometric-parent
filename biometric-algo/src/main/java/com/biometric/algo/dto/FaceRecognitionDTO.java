@@ -7,9 +7,6 @@ import lombok.Data;
 
 import java.io.IOException;
 
-/**
- * 人脸识别DTO
- */
 @Data
 public class FaceRecognitionDTO implements DataSerializable {
 
@@ -28,4 +25,3 @@ public class FaceRecognitionDTO implements DataSerializable {
     }
 
 }
-

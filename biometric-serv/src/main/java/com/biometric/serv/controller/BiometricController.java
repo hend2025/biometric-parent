@@ -11,9 +11,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-/**
- * 生物识别业务控制器
- */
 @Slf4j
 @RestController
 @RequestMapping("/api/biometric")
@@ -25,9 +22,6 @@ public class BiometricController {
     @Autowired
     private BosgFaceFturDMapper bosgFaceFturDMapper;
 
-    /**
-     * 1:N人脸识别
-     */
     @PostMapping("/face/recognize")
     public ResultVO<Map<String, Object>> recognizeFace() {
         try {
@@ -38,10 +32,9 @@ public class BiometricController {
             Map<String, Object> result = biometricService.recognizeFace(dto);
             return ResultVO.success("识别完成", result);
         } catch (Exception e) {
-            log.error("Face recognition failed", e);
+            log.error("人脸识别失败", e);
             return ResultVO.error(e.getMessage());
         }
     }
 
 }
-

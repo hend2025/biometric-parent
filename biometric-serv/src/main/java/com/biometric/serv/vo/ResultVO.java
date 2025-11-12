@@ -2,9 +2,6 @@ package com.biometric.serv.vo;
 
 import lombok.Data;
 
-/**
- * 统一返回结果
- */
 @Data
 public class ResultVO<T> {
 
@@ -42,4 +39,3 @@ public class ResultVO<T> {
         return result;
     }
 }
-

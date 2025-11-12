@@ -8,9 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.*;
 
-/**
- * 生物识别业务服务
- */
 @Slf4j
 @Service
 public class BiometricService {
@@ -18,20 +15,15 @@ public class BiometricService {
     @Autowired
     private FaceRecognitionService faceRecognitionService;
 
-    /**
-     * 1:N人脸识别
-     */
     public Map<String, Object>  recognizeFace(FaceRecognitionDTO dto) {
         long startTime = System.currentTimeMillis();
         
         try {
 
-            // 调用算法服务进行识别
             List<FaceMatchResult> matchResults = faceRecognitionService.recognizeFace(dto);
             
             long costTime = System.currentTimeMillis() - startTime;
             
-            // 转换结果为 Map
             List<Map<String, Object>> results = new ArrayList<>();
             for (FaceMatchResult matchResult : matchResults) {
                 Map<String, Object> resultMap = new HashMap<>();
@@ -49,10 +41,9 @@ public class BiometricService {
 
             return result;
         } catch (Exception e) {
-            log.error("Face recognition failed", e);
+            log.error("人脸识别失败", e);
             throw new RuntimeException("人脸识别失败: " + e.getMessage());
         }
     }
 
 }
-

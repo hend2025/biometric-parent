@@ -4,7 +4,6 @@ import com.biometric.algo.aggregator.TopNFaceAggregator;
 import com.biometric.algo.dto.FaceRecognitionDTO;
 import com.biometric.algo.model.FaceFeature;
 import com.biometric.algo.model.FaceMatchResult;
-import com.biometric.algo.util.Face303JavaCalcuater;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
 import lombok.extern.slf4j.Slf4j;
@@ -13,15 +12,10 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * 人脸识别服务 - 提供1:N识别能力
- */
 @Slf4j
 @Service
 public class FaceRecognitionService {
@@ -38,17 +32,11 @@ public class FaceRecognitionService {
 
     private static final String FACE_FEATURE_MAP = "faceFeatureMap";
 
-    /**
-     * 添加人脸特征到分布式缓存（自动生成 faceId）
-     */
     public String addFaceFeature(String psnNo, byte[] featureVector, String imageUrl) {
         String faceId = UUID.randomUUID().toString();
         return addFaceFeatureWithId(faceId, psnNo, featureVector, imageUrl);
     }
 
-    /**
-     * 添加人脸特征到分布式缓存（使用指定的 faceId）
-     */
     public String addFaceFeatureWithId(String faceId, String psnNo, byte[] featureVector, String imageUrl) {
         IMap<String, FaceFeature> faceFeatureMap = hazelcastInstance.getMap(FACE_FEATURE_MAP);
         
@@ -59,28 +47,22 @@ public class FaceRecognitionService {
         faceFeature.setImageUrl(imageUrl);
 
         faceFeatureMap.put(faceId, faceFeature);
-        log.debug("Added face feature: faceId={}, psnNo={}", faceId, psnNo);
+        log.debug("已添加人脸特征: faceId={}, psnNo={}", faceId, psnNo);
         
         return faceId;
     }
 
-    /**
-     * 删除人脸特征
-     */
     public boolean removeFaceFeature(String faceId) {
         IMap<String, FaceFeature> faceFeatureMap = hazelcastInstance.getMap(FACE_FEATURE_MAP);
         FaceFeature removed = faceFeatureMap.remove(faceId);
         
         if (removed != null) {
-            log.info("Removed face feature: faceId={}", faceId);
+            log.info("已删除人脸特征: faceId={}", faceId);
             return true;
         }
         return false;
     }
 
-    /**
-     * 根据用户ID删除所有人脸特征
-     */
     public int removeFaceFeaturesBypsnNo(Long psnNo) {
         IMap<String, FaceFeature> faceFeatureMap = hazelcastInstance.getMap(FACE_FEATURE_MAP);
         
@@ -90,26 +72,19 @@ public class FaceRecognitionService {
             .collect(Collectors.toList());
         
         toRemove.forEach(faceFeatureMap::remove);
-        log.info("Removed {} face features for psnNo={}", toRemove.size(), psnNo);
+        log.info("已删除 {} 条人脸特征，psnNo={}", toRemove.size(), psnNo);
         
         return toRemove.size();
     }
 
-    /**
-     * 1:N人脸识别 - 在所有特征中搜索最匹配的
-     */
     public List<FaceMatchResult> recognizeFace(FaceRecognitionDTO para) {
         IMap<String, FaceFeature> faceFeatureMap = hazelcastInstance.getMap(FACE_FEATURE_MAP);
 
-        // 使用聚合器进行人脸匹配，提高性能
         List<FaceMatchResult> results = faceFeatureMap.aggregate(new TopNFaceAggregator(para.getFeatureVector(), matchThreshold, topN));
 
         return results;
     }
 
-    /**
-     * 计算余弦相似度
-     */
     private double calculateCosineSimilarity(byte[] vector1, byte[] vector2) {
         if (vector1 == null || vector2 == null || vector1.length != vector2.length) {
             return 0.0;
@@ -133,4 +108,3 @@ public class FaceRecognitionService {
     }
 
 }
-

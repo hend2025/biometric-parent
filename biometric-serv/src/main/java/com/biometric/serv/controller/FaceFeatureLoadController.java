@@ -9,10 +9,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * 人脸特征加载控制器
- * 提供手动触发加载人脸特征数据的接口
- */
 @Slf4j
 @RestController
 @RequestMapping("/api/face/load")
@@ -21,9 +17,6 @@ public class FaceFeatureLoadController {
     @Autowired
     private FaceFeatureLoadService faceFeatureLoadService;
 
-    /**
-     * 手动触发全量加载人脸特征数据
-     */
     @PostMapping("/all")
     public ResultVO<Map<String, Object>> loadAllFaceFeatures() {
         log.info("接收到手动加载人脸特征数据请求");
@@ -36,7 +29,6 @@ public class FaceFeatureLoadController {
             data.put("totalCount", totalCount);
             
             if (totalCount > 0) {
-                // 异步执行加载
                 new Thread(() -> {
                     faceFeatureLoadService.loadFaceFeaturesToHazelcast();
                 }).start();
@@ -57,9 +49,6 @@ public class FaceFeatureLoadController {
         }
     }
 
-    /**
-     * 获取数据库中人脸特征数据总数
-     */
     @GetMapping("/count")
     public ResultVO<Map<String, Object>> getFaceFeatureCount() {
         try {
@@ -77,4 +66,3 @@ public class FaceFeatureLoadController {
     }
 
 }
-

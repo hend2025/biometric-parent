@@ -4,8 +4,6 @@ server:
 spring:
   application:
     name: biometric-serv
-
-  # 数据源配置
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
     driver-class-name: com.mysql.jdbc.Driver
@@ -24,7 +22,6 @@ spring:
       test-on-borrow: false
       test-on-return: false
 
-# MyBatis Plus配置
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
@@ -36,23 +33,19 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-# Hazelcast配置
 hazelcast:
   cluster:
     name: biometric-cluster
-  members: 127.0.0.1
-#  members: 192.168.57.225,192.168.57.100  # 集群成员列表，系统会自动计算节点总数
+#  members: 192.168.57.225
+  members: 192.168.57.225,192.168.57.100
 
-# 生物识别配置
 biometric:
   face:
-    # 人脸识别参数
     recognition:
-      threshold: 0.6  # 匹配阈值，相似度大于此值认为匹配成功
-      topN: 10  # 返回前N个最匹配的结果
-    # 人脸特征加载配置
-    autoload: true  # 是否在启动时自动加载人脸特征到 Hazelcast
-    partition: true  # 是否启用分区加载（每个节点只加载自己负责的那部分数据）
+      threshold: 0.6
+      topN: 10
+    autoload: true
+    partition: true
 
 logging:
   level:

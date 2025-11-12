@@ -5,9 +5,6 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableAsync;
 
-/**
- * 生物识别业务服务启动类
- */
 @SpringBootApplication(scanBasePackages = {"com.biometric.serv", "com.biometric.algo"})
 @MapperScan("com.biometric.serv.mapper")
 @EnableAsync
@@ -17,4 +14,3 @@ public class BiometricServApplication {
         SpringApplication.run(BiometricServApplication.class, args);
     }
 }
-

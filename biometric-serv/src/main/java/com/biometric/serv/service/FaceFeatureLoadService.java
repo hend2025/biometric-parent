@@ -20,10 +20,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * 人脸特征加载服务
- * 用于在服务启动时从数据库加载人脸特征数据到 Hazelcast
- */
 @Slf4j
 @Service
 public class FaceFeatureLoadService {
@@ -44,17 +40,12 @@ public class FaceFeatureLoadService {
     @Value("${biometric.face.partition:true}")
     private boolean enablePartition;
 
-    // 动态获取的节点信息（在运行时确定）
     private Integer dynamicNodeId = null;
     private Integer dynamicTotalNodes = null;
 
-    /**
-     * 加载人脸特征数据到 Hazelcast
-     */
     public void loadFaceFeaturesToHazelcast() {
         log.info("========== 开始加载人脸特征数据到 Hazelcast ==========");
         
-        // 动态获取节点信息
         initializeNodeInfo();
         
         int nodeId = dynamicNodeId != null ? dynamicNodeId : 0;
@@ -64,11 +55,10 @@ public class FaceFeatureLoadService {
                 nodeId, totalNodes, enablePartition);
         
         try {
-            // 查询有效的人脸特征数据
             QueryWrapper<BosgFaceFturD> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("VALI_FLAG", "1")  // 有效标志
-                       .eq("FACE_TMPL_STAS", "1")  // 人脸模板状态为有效
-                       .isNotNull("FACE_FTUR_DATA");  // 人脸特征数据不为空
+            queryWrapper.eq("VALI_FLAG", "1")
+                       .eq("FACE_TMPL_STAS", "1")
+                       .isNotNull("FACE_FTUR_DATA");
             
             List<BosgFaceFturD> faceFeatures = bosgFaceFturDMapper.selectList(queryWrapper);
             
@@ -89,7 +79,6 @@ public class FaceFeatureLoadService {
                 totalCount++;
                 
                 try {
-                    // 分区逻辑：根据节点ID判断是否由当前节点处理
                     if (enablePartition && !isDataBelongsToCurrentNode(faceFeature.getFaceBosgId())) {
                         skippedCount++;
                         if (skippedCount <= 3) {
@@ -107,7 +96,6 @@ public class FaceFeatureLoadService {
                         continue;
                     }
                     
-                    // 调用算法服务添加人脸特征
                     boolean success = addFaceFeatureToAlgoService(
                         faceFeature.getFaceBosgId(),
                         faceFeature.getPsnTmplNo(),
@@ -149,10 +137,6 @@ public class FaceFeatureLoadService {
         }
     }
 
-    /**
-     * 初始化节点信息
-     * 从 Hazelcast 集群中自动获取当前节点ID和总节点数
-     */
     private void initializeNodeInfo() {
         try {
             if (hazelcastInstance == null) {
@@ -162,7 +146,6 @@ public class FaceFeatureLoadService {
                 return;
             }
 
-            // 获取集群所有成员
             Set<Member> members = hazelcastInstance.getCluster().getMembers();
             
             if (members == null || members.isEmpty()) {
@@ -172,28 +155,22 @@ public class FaceFeatureLoadService {
                 return;
             }
 
-            // 获取当前成员
             Member localMember = hazelcastInstance.getCluster().getLocalMember();
             String localAddress = localMember.getAddress().getHost() + ":" + localMember.getAddress().getPort();
             
-            // 按照成员的地址排序（确保所有节点的排序结果一致）
             List<Member> sortedMembers = members.stream()
                     .sorted(Comparator.comparing(m -> m.getAddress().getHost() + ":" + m.getAddress().getPort()))
                     .collect(Collectors.toList());
 
-            // 确定总节点数
-            // 优先使用配置文件中的成员数量
             int configuredMemberCount = getConfiguredMemberCount();
             if (configuredMemberCount > 0) {
                 dynamicTotalNodes = configuredMemberCount;
                 log.info("使用配置文件的成员数量: {} (来自 hazelcast.members)", dynamicTotalNodes);
             } else {
-                // 如果配置为空，使用实际集群成员数量
                 dynamicTotalNodes = sortedMembers.size();
                 log.info("自动检测到集群成员数量: {}", dynamicTotalNodes);
             }
 
-            // 查找当前节点在排序列表中的位置（即节点ID）
             dynamicNodeId = 0;
             for (int i = 0; i < sortedMembers.size(); i++) {
                 Member member = sortedMembers.get(i);
@@ -223,17 +200,12 @@ public class FaceFeatureLoadService {
         }
     }
 
-    /**
-     * 从配置文件中获取成员数量
-     * 解析 hazelcast.members 配置，计算节点总数
-     */
     private int getConfiguredMemberCount() {
         if (configuredMembers == null || configuredMembers.trim().isEmpty()) {
             return 0;
         }
         
         try {
-            // 按逗号分割成员列表
             String[] members = configuredMembers.split(",");
             int count = 0;
             for (String member : members) {
@@ -248,19 +220,11 @@ public class FaceFeatureLoadService {
         }
     }
 
-    /**
-     * 判断数据是否属于当前节点
-     * 使用一致性哈希算法，根据 faceBosgId 的哈希值取模分配到不同节点
-     * 
-     * @param faceBosgId 人脸特征ID
-     * @return true=属于当前节点，false=属于其他节点
-     */
     private boolean isDataBelongsToCurrentNode(String faceBosgId) {
         int nodeId = dynamicNodeId != null ? dynamicNodeId : 0;
         int totalNodes = dynamicTotalNodes != null ? dynamicTotalNodes : 1;
         
         if (totalNodes <= 1) {
-            // 只有一个节点，所有数据都属于当前节点
             return true;
         }
         
@@ -269,42 +233,12 @@ public class FaceFeatureLoadService {
             return nodeId == 0;
         }
         
-        // 使用String的hashCode进行哈希，然后取绝对值避免负数
         int hash = Math.abs(faceBosgId.hashCode());
         int targetNodeId = hash % totalNodes;
         
         return targetNodeId == nodeId;
     }
 
-    /**
-     * 将 byte[] 转换为 float[]
-     * 人脸特征数据通常是 128 维或 512 维的浮点数数组
-     */
-    private float[] bytesToFloatArray(byte[] bytes) {
-        if (bytes == null || bytes.length == 0) {
-            return null;
-        }
-        
-        // 4 bytes per float
-        if (bytes.length % 4 != 0) {
-            log.warn("人脸特征数据长度不是 4 的倍数: {}", bytes.length);
-            return null;
-        }
-        
-        ByteBuffer buffer = ByteBuffer.wrap(bytes);
-        buffer.order(ByteOrder.LITTLE_ENDIAN);  // 根据实际情况调整字节序
-        
-        float[] floatArray = new float[bytes.length / 4];
-        for (int i = 0; i < floatArray.length; i++) {
-            floatArray[i] = buffer.getFloat();
-        }
-        
-        return floatArray;
-    }
-
-    /**
-     * 添加人脸特征到 Hazelcast
-     */
     private boolean addFaceFeatureToAlgoService(String faceId, String psnNo,
                                                 byte[] featureVector, String imageUrl) {
         try {
@@ -316,9 +250,6 @@ public class FaceFeatureLoadService {
         }
     }
 
-    /**
-     * 获取数据库中人脸特征的总数
-     */
     public long getTotalFaceFeatureCount() {
         QueryWrapper<BosgFaceFturD> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("VALI_FLAG", "1")
@@ -328,4 +259,3 @@ public class FaceFeatureLoadService {
         return bosgFaceFturDMapper.selectCount(queryWrapper);
     }
 }
-

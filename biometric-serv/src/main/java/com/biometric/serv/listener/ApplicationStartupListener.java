@@ -9,10 +9,6 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
-/**
- * 应用启动监听器
- * 在应用启动完成后自动加载人脸特征数据到 Hazelcast
- */
 @Slf4j
 @Component
 public class ApplicationStartupListener implements ApplicationListener<ApplicationReadyEvent> {
