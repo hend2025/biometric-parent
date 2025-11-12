@@ -40,21 +40,19 @@ mybatis-plus:
 hazelcast:
   cluster:
     name: biometric-cluster
-  members: 192.168.57.225,192.168.57.100
-
-# 人脸识别参数
-face:
-  recognition:
-    threshold: 0.6  # 匹配阈值，相似度大于此值认为匹配成功
-    topN: 10  # 返回前N个最匹配的结果
+  members: 127.0.0.1
+#  members: 192.168.57.225,192.168.57.100  # 集群成员列表，系统会自动计算节点总数
 
 # 生物识别配置
 biometric:
-  # 人脸特征加载配置
   face:
+    # 人脸识别参数
+    recognition:
+      threshold: 0.6  # 匹配阈值，相似度大于此值认为匹配成功
+      topN: 10  # 返回前N个最匹配的结果
+    # 人脸特征加载配置
     autoload: true  # 是否在启动时自动加载人脸特征到 Hazelcast
-    load:
-      delay: 5000  # 启动延迟加载时间（毫秒），确保 Hazelcast 已准备好
+    partition: true  # 是否启用分区加载（每个节点只加载自己负责的那部分数据）
 
 logging:
   level:

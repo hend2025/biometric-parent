@@ -30,10 +30,10 @@ public class FaceRecognitionService {
     @Qualifier("hazelcastInstance")
     private HazelcastInstance hazelcastInstance;
 
-    @Value("${face.recognition.threshold:0.6}")
+    @Value("${biometric.face.recognition.threshold:0.6}")
     private float matchThreshold;
 
-    @Value("${face.recognition.topN:10}")
+    @Value("${biometric.face.recognition.topN:10}")
     private int topN;
 
     private static final String FACE_FEATURE_MAP = "faceFeatureMap";
