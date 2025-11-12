@@ -15,14 +15,19 @@ public class BiometricService {
     @Autowired
     private FaceRecognitionService faceRecognitionService;
 
+    @Autowired
+    private PerformanceMonitorService performanceMonitorService;
+
     public Map<String, Object>  recognizeFace(FaceRecognitionDTO dto) {
         long startTime = System.currentTimeMillis();
+        boolean success = false;
         
         try {
 
             List<FaceMatchResult> matchResults = faceRecognitionService.recognizeFace(dto);
             
             long costTime = System.currentTimeMillis() - startTime;
+            success = true;
             
             List<Map<String, Object>> results = new ArrayList<>();
             for (FaceMatchResult matchResult : matchResults) {
@@ -43,6 +48,9 @@ public class BiometricService {
         } catch (Exception e) {
             log.error("人脸识别失败", e);
             throw new RuntimeException("人脸识别失败: " + e.getMessage());
+        } finally {
+            long duration = System.currentTimeMillis() - startTime;
+            performanceMonitorService.recordRecognition(success, duration);
         }
     }
 

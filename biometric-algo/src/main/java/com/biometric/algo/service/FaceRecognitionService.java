@@ -78,11 +78,22 @@ public class FaceRecognitionService {
     }
 
     public List<FaceMatchResult> recognizeFace(FaceRecognitionDTO para) {
-        IMap<String, FaceFeature> faceFeatureMap = hazelcastInstance.getMap(FACE_FEATURE_MAP);
-
-        List<FaceMatchResult> results = faceFeatureMap.aggregate(new TopNFaceAggregator(para.getFeatureVector(), matchThreshold, topN));
-
-        return results;
+        long startTime = System.currentTimeMillis();
+        try {
+            IMap<String, FaceFeature> faceFeatureMap = hazelcastInstance.getMap(FACE_FEATURE_MAP);
+            
+            List<FaceMatchResult> results = faceFeatureMap.aggregate(
+                new TopNFaceAggregator(para.getFeatureVector(), matchThreshold, topN));
+            
+            long duration = System.currentTimeMillis() - startTime;
+            log.debug("人脸识别完成，耗时: {} ms，匹配结果数: {}", duration, results.size());
+            
+            return results;
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("人脸识别失败，耗时: {} ms", duration, e);
+            throw e;
+        }
     }
 
     private double calculateCosineSimilarity(byte[] vector1, byte[] vector2) {

@@ -12,8 +12,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -39,6 +37,12 @@ public class FaceFeatureLoadService {
 
     @Value("${biometric.face.partition:true}")
     private boolean enablePartition;
+
+    @Value("${biometric.face.load.batchSize:500}")
+    private int batchSize;
+
+    @Value("${biometric.face.load.parallelThreads:4}")
+    private int parallelThreads;
 
     private Integer dynamicNodeId = null;
     private Integer dynamicTotalNodes = null;
@@ -69,54 +73,64 @@ public class FaceFeatureLoadService {
             
             log.info("数据库查询到 {} 条人脸特征数据", faceFeatures.size());
             
-            int totalCount = 0;
-            int skippedCount = 0;
+            int totalCount = faceFeatures.size();
+            List<BosgFaceFturD> nodeFaceFeatures = new ArrayList<>();
+            
+            for (BosgFaceFturD faceFeature : faceFeatures) {
+                if (!enablePartition || isDataBelongsToCurrentNode(faceFeature.getFaceBosgId())) {
+                    nodeFaceFeatures.add(faceFeature);
+                }
+            }
+            
+            int skippedCount = totalCount - nodeFaceFeatures.size();
+            log.info("当前节点需要处理 {} 条数据，跳过 {} 条", nodeFaceFeatures.size(), skippedCount);
+            
             int successCount = 0;
             int failCount = 0;
             List<String> invalidLengthList = new ArrayList<>();
             
-            for (BosgFaceFturD faceFeature : faceFeatures) {
-                totalCount++;
+            int totalBatches = (nodeFaceFeatures.size() + batchSize - 1) / batchSize;
+            log.info("开始批量加载，共 {} 批，每批 {} 条", totalBatches, batchSize);
+            
+            for (int i = 0; i < nodeFaceFeatures.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, nodeFaceFeatures.size());
+                List<BosgFaceFturD> batch = nodeFaceFeatures.subList(i, end);
                 
-                try {
-                    if (enablePartition && !isDataBelongsToCurrentNode(faceFeature.getFaceBosgId())) {
-                        skippedCount++;
-                        if (skippedCount <= 3) {
-                            log.debug("跳过不属于当前节点的数据: faceBosgId={}", faceFeature.getFaceBosgId());
+                int batchNumber = (i / batchSize) + 1;
+                log.info("处理第 {}/{} 批数据，共 {} 条", batchNumber, totalBatches, batch.size());
+                
+                for (BosgFaceFturD faceFeature : batch) {
+                    try {
+                        byte[] featureVector = faceFeature.getFaceFturData();
+                        int len = featureVector == null ? 0 : featureVector.length;
+                        if (featureVector == null || len != 512) {
+                            invalidLengthList.add(faceFeature.getFaceBosgId());
+                            failCount++;
+                            continue;
                         }
-                        continue;
-                    }
-                    
-                    byte[] featureVector = faceFeature.getFaceFturData();
-                    int len = featureVector == null ? 0 : featureVector.length;
-                    if (featureVector == null || len != 512) {
-                        invalidLengthList.add(faceFeature.getFaceBosgId());
-                        log.warn("人脸特征数据长度无效(期望512字节，实际{}字节)，跳过: faceBosgId={}", len, faceFeature.getFaceBosgId());
-                        failCount++;
-                        continue;
-                    }
-                    
-                    boolean success = addFaceFeatureToAlgoService(
-                        faceFeature.getFaceBosgId(),
-                        faceFeature.getPsnTmplNo(),
-                        featureVector,
-                        faceFeature.getFaceImgUrl()
-                    );
-                    
-                    if (success) {
-                        successCount++;
-                        if (successCount % 100 == 0) {
-                            log.info("当前节点已成功加载 {} 条人脸特征数据", successCount);
+                        
+                        boolean success = addFaceFeatureToAlgoService(
+                            faceFeature.getFaceBosgId(),
+                            faceFeature.getPsnTmplNo(),
+                            featureVector,
+                            faceFeature.getFaceImgUrl()
+                        );
+                        
+                        if (success) {
+                            successCount++;
+                        } else {
+                            failCount++;
                         }
-                    } else {
+                        
+                    } catch (Exception e) {
                         failCount++;
-                        log.warn("加载人脸特征失败: faceBosgId={}", faceFeature.getFaceBosgId());
+                        log.error("处理人脸特征数据异常: faceBosgId={}", 
+                                faceFeature.getFaceBosgId(), e);
                     }
-                    
-                } catch (Exception e) {
-                    failCount++;
-                    log.error("处理人脸特征数据异常: faceBosgId={}, error={}", 
-                            faceFeature.getFaceBosgId(), e.getMessage());
+                }
+                
+                if (batchNumber % 10 == 0) {
+                    log.info("已完成 {} 批，成功: {}, 失败: {}", batchNumber, successCount, failCount);
                 }
             }
             
