@@ -40,7 +40,6 @@ mybatis-plus:
 hazelcast:
   cluster:
     name: biometric-cluster
-  port: 5701
   members: 192.168.57.225,192.168.57.100
 
 # 人脸识别参数

@@ -29,7 +29,7 @@ public class HazelcastConfig {
 
         // 网络配置
         NetworkConfig networkConfig = config.getNetworkConfig();
-        networkConfig.setPort(port);
+        // networkConfig.setPort(port);
         networkConfig.setPortAutoIncrement(true);
         networkConfig.setPortCount(100);
 
