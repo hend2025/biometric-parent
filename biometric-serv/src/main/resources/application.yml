@@ -1,68 +1,29 @@
 server:
-  port: 7082
+  port: 7080
 
 spring:
   application:
     name: biometric-serv
   datasource:
-    type: com.alibaba.druid.pool.DruidDataSource
     driver-class-name: com.mysql.jdbc.Driver
-    url: jdbc:mysql://192.168.10.147:3306/medicare_test?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+    url: jdbc:mysql://127.0.0.1:3306/medicare_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useCursorFetch=true
     username: root
     password: 123456
-    druid:
-      initial-size: 10
-      min-idle: 10
-      max-active: 50
-      max-wait: 60000
-      time-between-eviction-runs-millis: 60000
-      min-evictable-idle-time-millis: 300000
-      validation-query: SELECT 1
-      test-while-idle: true
-      test-on-borrow: false
-      test-on-return: false
-      pool-prepared-statements: true
-      max-pool-prepared-statement-per-connection-size: 20
-      filters: stat,wall
-      web-stat-filter:
-        enabled: true
-      stat-view-servlet:
-        enabled: true
-        url-pattern: /druid/*
-        login-username: admin
-        login-password: admin
 
 mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.biometric.serv.entity
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   global-config:
     db-config:
-      id-type: auto
+      id-type: assign_id
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-hazelcast:
-  cluster:
-    name: biometric-cluster
-#  members: 192.168.57.225
-  members: 192.168.57.225,192.168.57.100
-
 biometric:
-  face:
-    recognition:
-      threshold: 0.6
-      topN: 10
-    autoload: true
-    partition: true
-    load:
-      batchSize: 500
-      parallelThreads: 4
-
-logging:
-  level:
-    com.biometric.serv: INFO
-    com.biometric.algo: INFO
-    com.hazelcast: WARN
+  load-on-startup: true
 

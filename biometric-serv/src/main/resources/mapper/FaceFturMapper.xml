@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.biometric.serv.mapper.FaceFturMapper">
+
+    <select id="streamScanAllFeatures"
+            resultType="com.biometric.serv.entity.FaceFtur"
+            fetchSize="-2147483648"
+            resultSetType="FORWARD_ONLY">
+        SELECT
+            FACE_BOSG_ID, PSN_TMPL_NO, FACE_FTUR_DATA
+        FROM
+            bosg_face_ftur_d
+        WHERE
+            VALI_FLAG = '1'
+    </select>
+</mapper>

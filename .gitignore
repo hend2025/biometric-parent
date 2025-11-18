@@ -1,8 +1,18 @@
+# Compiled class files
 *.class
+
+# Log files
 *.log
+logs/
+
+# Package Files
 *.jar
 *.war
+*.nar
 *.ear
+*.zip
+*.tar.gz
+*.rar
 
 # Maven
 target/
@@ -14,24 +24,29 @@ release.properties
 dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
 
-# IntelliJ IDEA
+# IDE
 .idea/
 *.iml
 *.iws
 *.ipr
-out/
-
-# Eclipse
-.project
-.classpath
-.settings/
-bin/
-
-# VS Code
 .vscode/
+.settings/
+.classpath
+.project
+.factorypath
 
 # OS
 .DS_Store
 Thumbs.db
 
+# Application
+application-local.yml
+application-dev.yml
+*.pid
+
+# Backup files
+*.bak
+*.swp
+*~
