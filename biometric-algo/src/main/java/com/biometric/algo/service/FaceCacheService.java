@@ -18,12 +18,10 @@ import java.util.stream.Collectors;
 public class FaceCacheService {
     private static final Logger log = LoggerFactory.getLogger(FaceCacheService.class);
     private final IMap<String, CachedFaceFeature> faceFeatureMap;
-    private final IMap<String, Set<String>>  personGroupMap;
 
     @Autowired
     public FaceCacheService(HazelcastInstance hazelcastInstance) {
         this.faceFeatureMap = hazelcastInstance.getMap(HazelcastConfiguration.FACE_FEATURE_MAP);
-        this.personGroupMap = hazelcastInstance.getMap("temp-person-group-map");
     }
 
     public void loadFeatures(List<CachedFaceFeature> features) {
@@ -43,10 +41,6 @@ public class FaceCacheService {
 
     public IMap<String, CachedFaceFeature> getFaceFeatureMap() {
         return faceFeatureMap;
-    }
-
-    public IMap<String, Set<String>> getPersonGroupMap() {
-        return personGroupMap;
     }
 
 }

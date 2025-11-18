@@ -17,13 +17,7 @@ mybatis-plus:
     map-underscore-to-camel-case: true
     cache-enabled: false
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
-  global-config:
-    db-config:
-      id-type: assign_id
-      logic-delete-field: deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
 
 biometric:
   load-on-startup: true
-
+  lock-timeout-seconds: 300

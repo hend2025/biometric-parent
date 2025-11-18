@@ -5,6 +5,7 @@ import com.biometric.algo.dto.CachedFaceFeature;
 import com.biometric.algo.dto.RecogResult;
 import com.hazelcast.map.IMap;
 import com.hazelcast.query.Predicate;
+import com.hazelcast.query.Predicates;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,18 +30,7 @@ public class FaceRecogService {
 
         FaceRecogAggregator aggregator = new FaceRecogAggregator(inputFeature, targetGroupIds, threshold, topN);
 
-        Predicate<String, CachedFaceFeature> groupPredicate = entry -> {
-            CachedFaceFeature feature = entry.getValue();
-            if (feature.getGroupIds() == null || feature.getGroupIds().isEmpty()) {
-                return false;
-            }
-            for (String targetGroupId : targetGroupIds) {
-                if (feature.getGroupIds().contains(targetGroupId)) {
-                    return true;
-                }
-            }
-            return false;
-        };
+        Predicate<String, CachedFaceFeature> groupPredicate = Predicates.in("groupIds[any]", targetGroupIds.toArray(new String[0]));
 
         List<RecogResult> result = faceFeatureMap.aggregate(aggregator, groupPredicate);
 

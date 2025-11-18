@@ -6,7 +6,6 @@ import com.biometric.serv.entity.GrpPsn;
 import com.biometric.serv.entity.FaceFtur;
 import com.biometric.serv.mapper.GrpPsnMapper;
 import com.biometric.serv.mapper.FaceFturMapper;
-import com.hazelcast.map.IMap;
 import org.apache.ibatis.session.ResultContext;
 import org.apache.ibatis.session.ResultHandler;
 import org.slf4j.Logger;
@@ -23,8 +22,8 @@ public class DataLoadService {
 
     private static final Logger log = LoggerFactory.getLogger(DataLoadService.class);
     private static final int BATCH_SIZE = 1000;
-    private static final int LOG_INTERVAL = 50000;
-    private static final int GROUP_MAP_CHUNK_SIZE = 50000;
+    private static final int LOG_INTERVAL = 10000;
+    private static final int GROUP_MAP_CHUNK_SIZE = 10000;
 
     @Autowired
     private GrpPsnMapper GrpPsnMapper;
@@ -40,8 +39,8 @@ public class DataLoadService {
         faceCacheService.clearCache();
 
         log.info("Step 1: Pre-loading Person-to-Group mappings into Hazelcast (chunked streaming)...");
-        IMap<String, Set<String>> tempGroupMap = loadPsnToGroupMapDirectly();
-        log.info("Step 1: Loaded {} unique person-group mappings into temporary cache.", tempGroupMap.size());
+        Map<String, Set<String>> psnToGroupMap = loadPsnToGroupMapDirectly();
+        log.info("Step 1: Loaded {} unique person-group mappings into temporary cache.", psnToGroupMap.size());
 
         log.info("Step 2: Stream loading face features from DB with direct cache insertion...");
         AtomicLong totalFeaturesLoaded = new AtomicLong(0);
@@ -52,7 +51,7 @@ public class DataLoadService {
             public void handleResult(ResultContext<? extends FaceFtur> resultContext) {
                 FaceFtur feature = resultContext.getResultObject();
                 
-                Set<String> groupIds = tempGroupMap.get(feature.getPsnTmplNo());
+                Set<String> groupIds = psnToGroupMap.get(feature.getPsnTmplNo());
                 if (groupIds == null) {
                     groupIds = Collections.emptySet();
                 }
@@ -86,19 +85,18 @@ public class DataLoadService {
                     batchMap.size(), totalFeaturesLoaded.get());
             batchMap.clear();
         }
-        
+
         log.info("Step 3: Cleaning up temporary group mapping cache...");
-        tempGroupMap.destroy();
+        psnToGroupMap.clear();
 
         long duration = (System.currentTimeMillis() - startTime) / 1000;
         log.info("Data load finished. Total {} features loaded in {} seconds.",
                 totalFeaturesLoaded.get(), duration);
     }
 
-    private IMap<String, Set<String>> loadPsnToGroupMapDirectly() {
-        IMap<String, Set<String>> tempMap = faceCacheService.getPersonGroupMap();
-        tempMap.clear();
-        
+    private Map<String, Set<String>> loadPsnToGroupMapDirectly() {
+        Map<String, Set<String>> psnToGroupMap = new HashMap<>();
+
         final AtomicLong relationCount = new AtomicLong(0);
         final Map<String, Set<String>> chunkBuffer = new ConcurrentHashMap<>(GROUP_MAP_CHUNK_SIZE);
         
@@ -113,29 +111,26 @@ public class DataLoadService {
                 long count = relationCount.incrementAndGet();
                 
                 if (chunkBuffer.size() >= GROUP_MAP_CHUNK_SIZE) {
-                    tempMap.putAll(chunkBuffer);
+                    psnToGroupMap.putAll(chunkBuffer);
                     log.info("... flushed {} persons to cache (total relations: {})",
                             chunkBuffer.size(), count);
                     chunkBuffer.clear();
                 }
-                
-                if (count % 500000 == 0) {
-                    log.info("... processed {} relations", count);
-                }
+
             }
         };
         
         GrpPsnMapper.streamScanAllRelations(handler);
         
         if (!chunkBuffer.isEmpty()) {
-            tempMap.putAll(chunkBuffer);
+            psnToGroupMap.putAll(chunkBuffer);
             log.info("... flushed final {} persons to cache", chunkBuffer.size());
             chunkBuffer.clear();
         }
         
         log.info("Finished loading Person-to-Group mappings. Total relations: {}, Unique persons: {}",
-                relationCount.get(), tempMap.size());
-        return tempMap;
+                relationCount.get(), psnToGroupMap.size());
+        return psnToGroupMap;
     }
 
 }

@@ -47,6 +47,9 @@ public class HazelcastConfiguration {
         
         mapConfig.setNearCacheConfig(nearCacheConfig);
 
+        IndexConfig groupIndex = new IndexConfig(IndexType.HASH, "groupIds[any]");
+        mapConfig.addIndexConfig(groupIndex);
+
         config.addMapConfig(mapConfig);
 
         return config;
