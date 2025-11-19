@@ -60,6 +60,9 @@ public class FaceRecogAggregator
         }
 
         int[] bFeat2 = candidate.getBinaryFeature();
+        if (bFeat2 == null) {
+            return;
+        }
 
         boolean isSimilar = Face303JavaCalcuater.isBinaFeatSimilar(
                 inputBinaryFeature[0], inputBinaryFeature[1], inputBinaryFeature[2], inputBinaryFeature[3],
@@ -73,12 +76,12 @@ public class FaceRecogAggregator
             if (similarity >= threshold) {
                 if (localTopNHeap.size() < topN) {
                     localTopNHeap.add(new RecogResult(
-                            candidate.getPsnTmplNo(), candidate.getFaceId(), similarity
+                            candidate.getPsnTmplNo(), candidate.getFaceId(), similarity, true
                     ));
                 } else if (similarity > localTopNHeap.peek().getScore()) {
                     localTopNHeap.poll();
                     localTopNHeap.add(new RecogResult(
-                            candidate.getPsnTmplNo(), candidate.getFaceId(), similarity
+                            candidate.getPsnTmplNo(), candidate.getFaceId(), similarity, true
                     ));
                 }
             }
