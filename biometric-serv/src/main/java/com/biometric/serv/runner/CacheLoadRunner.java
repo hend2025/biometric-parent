@@ -18,11 +18,11 @@ public class CacheLoadRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(CacheLoadRunner.class);
     private static final String LOAD_LOCK_NAME = "face-feature-load-lock";
 
-    @Value("${biometric.load-on-startup:true}")
+    @Value("${biometric.face-loader.load-on-startup:true}")
     private boolean loadOnStartup;
-    @Value("${biometric.lock-timeout-seconds:60}")
+    @Value("${biometric.face-loader.lock-timeout-seconds:60}")
     private int lockTimeoutSeconds;
-    @Value("${biometric.force-reload:false}")
+    @Value("${biometric.face-loader.force-reload:false}")
     private boolean forceReload;
 
     @Autowired

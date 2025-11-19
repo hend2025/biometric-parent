@@ -19,9 +19,17 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 biometric:
-  load-on-startup: true
-  lock-timeout-seconds: 60
-  force-reload: false
+  algo:
+    socket:
+      host: 127.0.0.1
+      port: 9098
+      default-face-version: FACE310
+      default-finger-version: FINGER30
+      default-fingerprint-version: FINGERPRINT30
+  face-loader:
+    load-on-startup: true
+    lock-timeout-seconds: 60
+    force-reload: false
   recognition:
     threshold: 0.6
     top-n: 3
@@ -31,3 +39,5 @@ hazelcast:
     name: biometric-hazelcast-instance
     members: 127.0.0.1
 #  members: 192.168.57.225,192.168.57.100
+
+
