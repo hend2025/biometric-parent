@@ -25,18 +25,29 @@ public class FaceRecogService {
     }
 
     public List<RecogResult> searchInGroups(byte[] inputFeature, Set<String> targetGroupIds, double threshold, int topN) {
-        log.info("Starting 1:N Top-{} search in groups: {}", topN, targetGroupIds);
         long startTime = System.currentTimeMillis();
+        int totalCandidates = faceFeatureMap.size();
+        
+        log.info("Starting 1:N Top-{} search | Groups: {} | Total candidates: {} | Threshold: {}", 
+                topN, targetGroupIds != null ? targetGroupIds.size() : "ALL", totalCandidates, threshold);
+        
         List<RecogResult> result = null;
-        FaceRecogAggregator aggregator = new FaceRecogAggregator(inputFeature, targetGroupIds, threshold, topN);
+        FaceRecogAggregator aggregator = new FaceRecogAggregator(inputFeature, threshold, topN);
+        
+        long aggregationStart = System.currentTimeMillis();
         if(targetGroupIds!=null && !targetGroupIds.isEmpty()){
             Predicate<String, CachedFaceFeature> groupPredicate = Predicates.in("groupIds[any]", targetGroupIds.toArray(new String[0]));
             result = faceFeatureMap.aggregate(aggregator, groupPredicate);
         }else{
             result = faceFeatureMap.aggregate(aggregator);
         }
-        long duration = System.currentTimeMillis() - startTime;
-        log.info("Search in groups {} finished in {} ms. Found: {} matches.", targetGroupIds, duration, result.size());
+        long aggregationDuration = System.currentTimeMillis() - aggregationStart;
+        long totalDuration = System.currentTimeMillis() - startTime;
+        
+        log.info("1:N search completed | Total: {}ms | Aggregation: {}ms | Matches: {} | Throughput: {:.2f} comparisons/ms", 
+                totalDuration, aggregationDuration, result.size(), 
+                totalCandidates / (double) Math.max(aggregationDuration, 1));
+        
         return result;
     }
 

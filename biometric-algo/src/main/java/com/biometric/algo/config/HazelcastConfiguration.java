@@ -21,10 +21,17 @@ public class HazelcastConfiguration {
         Config config = new Config();
         config.setClusterName(clusterName);
 
-        config.setProperty("hazelcast.operation.thread.count", "8");
-        config.setProperty("hazelcast.operation.generic.thread.count", "4");
-        config.setProperty("hazelcast.io.thread.count", "4");
+        int cpuCores = Runtime.getRuntime().availableProcessors();
+        config.setProperty("hazelcast.operation.thread.count", String.valueOf(Math.max(cpuCores, 16)));
+        config.setProperty("hazelcast.operation.generic.thread.count", String.valueOf(Math.max(cpuCores / 2, 8)));
+        config.setProperty("hazelcast.io.thread.count", String.valueOf(Math.max(cpuCores / 2, 8)));
         config.setProperty("hazelcast.partition.count", "271");
+        config.setProperty("hazelcast.query.result.size.limit", "-1");
+        config.setProperty("hazelcast.query.max.local.partition.limit.for.precheck", "3");
+
+        config.setProperty("hazelcast.aggregation.accumulation.parallel.evaluation", "true");
+        config.setProperty("hazelcast.partition.operation.thread.count", String.valueOf(Math.max(cpuCores, 16)));
+        config.setProperty("hazelcast.slow.operation.detector.threshold.millis", "10000");
 
         NetworkConfig networkConfig = config.getNetworkConfig();
         networkConfig.setPort(5701);
@@ -45,30 +52,23 @@ public class HazelcastConfiguration {
         mapConfig.setBackupCount(0);
         mapConfig.setAsyncBackupCount(0);
         mapConfig.setReadBackupData(true);
-        
-        mapConfig.setInMemoryFormat(InMemoryFormat.BINARY);
-        
-        mapConfig.setStatisticsEnabled(false);
-        
-        NearCacheConfig nearCacheConfig = new NearCacheConfig();
-        nearCacheConfig.setInMemoryFormat(InMemoryFormat.BINARY);
-        nearCacheConfig.setInvalidateOnChange(true);
-        nearCacheConfig.setTimeToLiveSeconds(300);
-        nearCacheConfig.setMaxIdleSeconds(180);
-        nearCacheConfig.setCacheLocalEntries(false);
-        
-        EvictionConfig evictionConfig = new EvictionConfig();
-        evictionConfig.setEvictionPolicy(EvictionPolicy.LRU);
-        evictionConfig.setMaxSizePolicy(MaxSizePolicy.ENTRY_COUNT);
-        evictionConfig.setSize(50000);
-        nearCacheConfig.setEvictionConfig(evictionConfig);
-        
-        mapConfig.setNearCacheConfig(nearCacheConfig);
+
+        mapConfig.setInMemoryFormat(InMemoryFormat.OBJECT);
+
+        mapConfig.setStatisticsEnabled(true);
+        mapConfig.setPerEntryStatsEnabled(false);
 
         IndexConfig groupIndex = new IndexConfig(IndexType.HASH, "groupIds[any]");
+        groupIndex.setName("idx_group_ids");
         mapConfig.addIndexConfig(groupIndex);
 
         config.addMapConfig(mapConfig);
+
+        config.getSerializationConfig()
+                .setAllowUnsafe(true)
+                .setUseNativeByteOrder(true)
+                .setEnableCompression(false)
+                .setPortableVersion(1);
 
         return config;
 

@@ -20,13 +20,15 @@ public class CacheLoadRunner implements ApplicationRunner {
 
     @Value("${biometric.load-on-startup:true}")
     private boolean loadOnStartup;
-    @Value("${biometric.lock-timeout-seconds:300}")
+    @Value("${biometric.lock-timeout-seconds:60}")
     private int lockTimeoutSeconds;
+    @Value("${biometric.force-reload:false}")
+    private boolean forceReload;
 
     @Autowired
-    private DataLoadService dataLoadService;
-    @Autowired
     private HazelcastInstance hazelcastInstance;
+    @Autowired
+    private DataLoadService dataLoadService;
     @Autowired
     private FaceCacheService faceCacheService;
 
@@ -36,24 +38,62 @@ public class CacheLoadRunner implements ApplicationRunner {
             log.warn("CacheLoadRunner: `biometric.load-on-startup` is false. Skipping data load check.");
             return;
         }
-        FencedLock lock = hazelcastInstance.getCPSubsystem().getLock(LOAD_LOCK_NAME);
+        
+        log.info("Starting cache load process. Lock timeout: {} seconds, Force reload: {}", lockTimeoutSeconds, forceReload);
+        
+        FencedLock lock = null;
         boolean lockAcquired = false;
+        
         try {
+            lock = hazelcastInstance.getCPSubsystem().getLock(LOAD_LOCK_NAME);
+            
             log.info("Attempting to acquire distributed lock for feature loading...");
             lockAcquired = lock.tryLock(lockTimeoutSeconds, TimeUnit.SECONDS);
-            if (lockAcquired) {
-                log.info("Distributed lock acquired. This node will load features.");
-                if (faceCacheService.getFaceFeatureMap().isEmpty()) {
-                    dataLoadService.loadAllFeaturesIntoCache();
-                }
+            
+            if (!lockAcquired) {
+                log.warn("Failed to acquire distributed lock within {} seconds. " +
+                        "Another node may be loading data or lock is stuck.", lockTimeoutSeconds);
+                return;
             }
+            
+            log.info("Distributed lock acquired. This node will load features.");
+            
+            int currentSize = faceCacheService.getFaceFeatureMap().size();
+            log.info("Current cache size: {} features", currentSize);
+            
+            if (forceReload || currentSize == 0) {
+                if (forceReload) {
+                    log.info("Force reload enabled. Reloading all features...");
+                } else {
+                    log.info("Cache is empty. Loading features...");
+                }
+                
+                long startTime = System.currentTimeMillis();
+                dataLoadService.loadAllFeaturesIntoCache();
+                long duration = System.currentTimeMillis() - startTime;
+                
+                int finalSize = faceCacheService.getFaceFeatureMap().size();
+                log.info("Cache load completed in {} ms. Final cache size: {} features", duration, finalSize);
+                        
+                if (finalSize == 0) {
+                    log.error("WARNING: Cache is still empty after loading. Check database connectivity.");
+                }
+            } else {
+                log.info("Cache already contains {} features. Skipping reload.", currentSize);
+            }
+
         } catch (Exception e) {
+            Thread.currentThread().interrupt();
             log.error("Error loading face features", e);
-            throw e;
+            throw new RuntimeException("Failed to load face features", e);
         } finally {
-            if (lockAcquired) {
-                lock.unlock();
-                log.info("Distributed lock released");
+            if (lockAcquired && lock != null) {
+                try {
+                    lock.unlock();
+                    log.info("Distributed lock released");
+                } catch (Exception e) {
+                    log.error("Error releasing distributed lock", e);
+                }
             }
         }
     }

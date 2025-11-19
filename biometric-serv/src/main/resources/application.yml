@@ -20,7 +20,11 @@ mybatis-plus:
 
 biometric:
   load-on-startup: true
-  lock-timeout-seconds: 300
+  lock-timeout-seconds: 60
+  force-reload: false
+  recognition:
+    threshold: 0.6
+    top-n: 3
 
 hazelcast:
   cluster:

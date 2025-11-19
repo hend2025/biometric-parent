@@ -12,44 +12,63 @@ public class FaceRecogAggregator
         implements Aggregator<Map.Entry<String, CachedFaceFeature>, List<RecogResult>>, Serializable {
 
     private static final long serialVersionUID = 1L;
+    private static final int MAX_TOP_N = 100;
+    private static final int MIN_TOP_N = 1;
+
     private final byte[] inputFeature;
-    private final Set<String> targetGroupIds;
     private final double threshold;
     private final int topN;
-    private transient PriorityQueue<RecogResult> localTopNHeap;
+    private PriorityQueue<RecogResult> localTopNHeap;
+    
+    private transient float[] inputFloatFeature;
+    private transient int[] inputBinaryFeature;
 
-    public FaceRecogAggregator(byte[] inputFeature, Set<String> targetGroupIds, double threshold, int topN) {
+    public FaceRecogAggregator(byte[] inputFeature, double threshold, int topN) {
+        if (inputFeature == null || inputFeature.length != 512) {
+            throw new IllegalArgumentException("Input feature must be 512 bytes");
+        }
+        if (topN < MIN_TOP_N || topN > MAX_TOP_N) {
+            throw new IllegalArgumentException("topN must be between " + MIN_TOP_N + " and " + MAX_TOP_N);
+        }
+        if (threshold < 0 || threshold > 1) {
+            throw new IllegalArgumentException("Threshold must be between 0 and 1");
+        }
+
         this.inputFeature = inputFeature;
-        this.targetGroupIds = targetGroupIds;
         this.threshold = threshold;
         this.topN = topN;
         initHeap();
     }
 
     private void initHeap() {
-        this.localTopNHeap = new PriorityQueue<>(topN, Comparator.comparingDouble(RecogResult::getScore));
+        this.localTopNHeap = new PriorityQueue<>(topN, new RecogResultScoreComparator());
+        this.inputBinaryFeature = Face303JavaCalcuater.getBinaFeat(this.inputFeature);
+        this.inputFloatFeature = Face303JavaCalcuater.toFloatArray(this.inputFeature);
     }
 
     @Override
     public void accumulate(Map.Entry<String, CachedFaceFeature> entry) {
-        if (localTopNHeap == null) {
-            initHeap();
+        if (entry == null || entry.getValue() == null) {
+            return;
         }
-        CachedFaceFeature candidate = entry.getValue();
 
-        int[] bFeat1 = Face303JavaCalcuater.getBinaFeat(this.inputFeature);
-        int[] bFeat2 = Face303JavaCalcuater.getBinaFeat(candidate.getFeatureData());
+        CachedFaceFeature candidate = entry.getValue();
+        
+        if (inputBinaryFeature == null) {
+            inputBinaryFeature = Face303JavaCalcuater.getBinaFeat(this.inputFeature);
+            inputFloatFeature = Face303JavaCalcuater.toFloatArray(this.inputFeature);
+        }
+
+        int[] bFeat2 = candidate.getBinaryFeature();
 
         boolean isSimilar = Face303JavaCalcuater.isBinaFeatSimilar(
-                bFeat1[0], bFeat1[1], bFeat1[2], bFeat1[3],
+                inputBinaryFeature[0], inputBinaryFeature[1], inputBinaryFeature[2], inputBinaryFeature[3],
                 bFeat2[0], bFeat2[1], bFeat2[2], bFeat2[3], 283
         );
 
         if (isSimilar) {
-            float similarity = Face303JavaCalcuater.compare(
-                    Face303JavaCalcuater.toFloatArray(this.inputFeature),
-                    Face303JavaCalcuater.toFloatArray(candidate.getFeatureData())
-            );
+            float[] candidateFloatFeature = Face303JavaCalcuater.toFloatArray(candidate.getFeatureData());
+            float similarity = Face303JavaCalcuater.compare(inputFloatFeature, candidateFloatFeature);
 
             if (similarity >= threshold) {
                 if (localTopNHeap.size() < topN) {
@@ -64,16 +83,16 @@ public class FaceRecogAggregator
                 }
             }
         }
-
     }
 
     @Override
     public void combine(Aggregator aggregator) {
-        if (localTopNHeap == null) {
-            initHeap();
+        if (aggregator == null) {
+            return;
         }
+
         FaceRecogAggregator other = (FaceRecogAggregator) aggregator;
-        if (other.localTopNHeap == null) {
+        if (other.localTopNHeap == null || other.localTopNHeap.isEmpty()) {
             return;
         }
         for (RecogResult otherResult : other.localTopNHeap) {
@@ -94,6 +113,15 @@ public class FaceRecogAggregator
         List<RecogResult> results = new ArrayList<>(localTopNHeap);
         results.sort(RecogResult.maxScoreComparator());
         return results;
+    }
+    
+    private static class RecogResultScoreComparator implements Comparator<RecogResult>, Serializable {
+        private static final long serialVersionUID = 1L;
+        
+        @Override
+        public int compare(RecogResult r1, RecogResult r2) {
+            return Double.compare(r1.getScore(), r2.getScore());
+        }
     }
 
 }
