@@ -1,6 +1,7 @@
 package com.biometric.algo.aggregator;
 
 import com.biometric.algo.dto.CachedFaceFeature;
+import com.biometric.algo.dto.RecogParam;
 import com.biometric.algo.dto.RecogResult;
 import com.biometric.algo.util.Face303JavaCalcuater;
 import com.hazelcast.aggregation.Aggregator;
@@ -23,7 +24,12 @@ public class FaceRecogAggregator
     private transient float[] inputFloatFeature;
     private transient int[] inputBinaryFeature;
 
-    public FaceRecogAggregator(byte[] inputFeature, double threshold, int topN) {
+    RecogParam params;
+
+    public FaceRecogAggregator(RecogParam params) {
+        this.inputFeature = params.getFeatures().get(0);
+        this.threshold = params.getThreshold();
+        this.topN = params.getTopN();
         if (inputFeature == null || inputFeature.length != 512) {
             throw new IllegalArgumentException("Input feature must be 512 bytes");
         }
@@ -33,18 +39,11 @@ public class FaceRecogAggregator
         if (threshold < 0 || threshold > 1) {
             throw new IllegalArgumentException("Threshold must be between 0 and 1");
         }
-
-        this.inputFeature = inputFeature;
-        this.threshold = threshold;
-        this.topN = topN;
-        initHeap();
-    }
-
-    private void initHeap() {
         this.localTopNHeap = new PriorityQueue<>(topN, new RecogResultScoreComparator());
         this.inputBinaryFeature = Face303JavaCalcuater.getBinaFeat(this.inputFeature);
         this.inputFloatFeature = Face303JavaCalcuater.toFloatArray(this.inputFeature);
     }
+
 
     @Override
     public void accumulate(Map.Entry<String, CachedFaceFeature> entry) {
@@ -59,7 +58,7 @@ public class FaceRecogAggregator
             inputFloatFeature = Face303JavaCalcuater.toFloatArray(this.inputFeature);
         }
 
-        int[] bFeat2 = candidate.getBinaryFeature();
+        int[] bFeat2 = Face303JavaCalcuater.getBinaFeat(candidate.getFeatureData());
         if (bFeat2 == null) {
             return;
         }
@@ -75,14 +74,20 @@ public class FaceRecogAggregator
 
             if (similarity >= threshold) {
                 if (localTopNHeap.size() < topN) {
-                    localTopNHeap.add(new RecogResult(
-                            candidate.getPsnTmplNo(), candidate.getFaceId(), similarity, true
-                    ));
+                    RecogResult result = new RecogResult();
+                    result.setPsnTmplNo(candidate.getPsnTmplNo());
+                    result.setFaceId(candidate.getFaceId());
+                    result.setScore(similarity);
+                    result.setMatched(true);
+                    localTopNHeap.add(result);
                 } else if (similarity > localTopNHeap.peek().getScore()) {
                     localTopNHeap.poll();
-                    localTopNHeap.add(new RecogResult(
-                            candidate.getPsnTmplNo(), candidate.getFaceId(), similarity, true
-                    ));
+                    RecogResult result = new RecogResult();
+                    result.setPsnTmplNo(candidate.getPsnTmplNo());
+                    result.setFaceId(candidate.getFaceId());
+                    result.setScore(similarity);
+                    result.setMatched(true);
+                    localTopNHeap.add(result);
                 }
             }
         }
@@ -114,16 +119,16 @@ public class FaceRecogAggregator
             return new ArrayList<>();
         }
         List<RecogResult> results = new ArrayList<>(localTopNHeap);
-        results.sort(RecogResult.maxScoreComparator());
+        results.sort((r1, r2) -> Float.compare(r2.getScore(), r1.getScore()));
         return results;
     }
-    
+
     private static class RecogResultScoreComparator implements Comparator<RecogResult>, Serializable {
         private static final long serialVersionUID = 1L;
-        
+
         @Override
         public int compare(RecogResult r1, RecogResult r2) {
-            return Double.compare(r1.getScore(), r2.getScore());
+            return Float.compare(r1.getScore(), r2.getScore());
         }
     }
 

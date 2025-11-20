@@ -2,6 +2,7 @@ package com.biometric.algo.service;
 
 import com.biometric.algo.aggregator.FaceRecogAggregator;
 import com.biometric.algo.dto.CachedFaceFeature;
+import com.biometric.algo.dto.RecogParam;
 import com.biometric.algo.dto.RecogResult;
 import com.hazelcast.map.IMap;
 import com.hazelcast.query.Predicate;
@@ -11,8 +12,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import java.util.List;
-import java.util.Set;
+import org.springframework.util.CollectionUtils;
+
+import java.util.*;
 
 @Service
 public class FaceRecogService {
@@ -24,40 +26,33 @@ public class FaceRecogService {
         this.faceFeatureMap = faceCacheService.getFaceFeatureMap();
     }
 
-    public List<RecogResult> searchInGroups(byte[] inputFeature, Set<String> targetGroupIds, double threshold, int topN) {
-        if (inputFeature == null || inputFeature.length != 512) {
-            throw new IllegalArgumentException("Input feature must be 512 bytes, got: " + 
-                    (inputFeature == null ? "null" : inputFeature.length));
+    public List<RecogResult> recogOneToMany(RecogParam params) {
+        if (params == null) {
+            throw new IllegalArgumentException("RecogParam cannot be null");
         }
-        if (threshold < 0 || threshold > 1) {
-            throw new IllegalArgumentException("Threshold must be between 0 and 1, got: " + threshold);
+        if ((params.getFeatures() == null || CollectionUtils.isEmpty(params.getFeatures())) &&
+                CollectionUtils.isEmpty(params.getImages())) {
+            throw new IllegalArgumentException("Features cannot be null");
         }
-        if (topN < 1 || topN > 100) {
-            throw new IllegalArgumentException("topN must be between 1 and 100, got: " + topN);
+        if (params.getThreshold() < 0 || params.getThreshold() > 1) {
+            throw new IllegalArgumentException("Threshold must be between 0 and 1, got: " + params.getThreshold());
         }
-        
-        long startTime = System.currentTimeMillis();
-        int totalCandidates = faceFeatureMap.size();
-        
-        log.info("Starting 1:N Top-{} search | Groups: {} | Total candidates: {} | Threshold: {}", 
-                topN, targetGroupIds != null ? targetGroupIds.size() : "ALL", totalCandidates, threshold);
-        
+        if (params.getTopN() < 1 || params.getTopN() > 100) {
+            throw new IllegalArgumentException("topN must be between 1 and 100, got: " + params.getTopN());
+        }
+
         List<RecogResult> result = null;
-        FaceRecogAggregator aggregator = new FaceRecogAggregator(inputFeature, threshold, topN);
-        
-        long aggregationStart = System.currentTimeMillis();
-        if(targetGroupIds!=null && !targetGroupIds.isEmpty()){
-            Predicate<String, CachedFaceFeature> groupPredicate = Predicates.in("groupIds[any]", targetGroupIds.toArray(new String[0]));
-            result = faceFeatureMap.aggregate(aggregator, groupPredicate);
-        }else{
+        long startTime = System.currentTimeMillis();
+        FaceRecogAggregator aggregator = new FaceRecogAggregator(params);
+        if(params.getGroups() == null || CollectionUtils.isEmpty(params.getGroups())){
             result = faceFeatureMap.aggregate(aggregator);
+        }else{
+            Predicate<String, CachedFaceFeature> groupPredicate = Predicates.in("groupIds[any]", params.getGroups().toArray(new String[0]));
+            result = faceFeatureMap.aggregate(aggregator, groupPredicate);
         }
-        long aggregationDuration = System.currentTimeMillis() - aggregationStart;
+
         long totalDuration = System.currentTimeMillis() - startTime;
-        
-        double throughput = totalCandidates / (double) Math.max(aggregationDuration, 1);
-        log.info("1:N search completed | Total: {}ms | Aggregation: {}ms | Matches: {} | Throughput: {:.2f} comparisons/ms | Candidates: {}", 
-                totalDuration, aggregationDuration, result != null ? result.size() : 0, throughput, totalCandidates);
+        log.info("1:N search completed cost : {}ms", totalDuration);
         
         return result;
     }

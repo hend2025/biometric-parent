@@ -8,8 +8,16 @@ import java.io.Serializable;
 @Data
 @TableName("bosg_face_ftur_d")
 public class FaceFtur implements Serializable {
+
     @TableId
     private String faceBosgId;
+
     private String psnTmplNo;
+
     private byte[] faceFturData;
+
+    private String faceCrteTmplType;
+
+    private String algoVerId;
+
 }

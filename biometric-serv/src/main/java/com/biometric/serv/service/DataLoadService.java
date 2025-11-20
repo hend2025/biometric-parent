@@ -75,12 +75,13 @@ public class DataLoadService {
 
             Set<String> groupIds = psnToGroupMap.getOrDefault(feature.getPsnTmplNo(), Collections.emptySet());
 
-            CachedFaceFeature cachedFeature = new CachedFaceFeature(
-                    feature.getFaceBosgId(),
-                    feature.getPsnTmplNo(),
-                    feature.getFaceFturData(),
-                    groupIds
-            );
+            CachedFaceFeature cachedFeature = new CachedFaceFeature();
+            cachedFeature.setPsnTmplNo(feature.getPsnTmplNo());
+            cachedFeature.setFaceId(feature.getFaceBosgId());
+            cachedFeature.setFeatureData(feature.getFaceFturData());
+            cachedFeature.setTemplateType(feature.getFaceCrteTmplType());
+            cachedFeature.setAlgoType(feature.getAlgoVerId());
+            cachedFeature.setGroupIds(groupIds.toArray(new String[0]));
 
             synchronized (batchMap) {
                 batchMap.put(cachedFeature.getFaceId(), cachedFeature);
