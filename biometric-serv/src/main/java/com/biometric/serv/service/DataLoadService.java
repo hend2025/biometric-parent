@@ -87,7 +87,7 @@ public class DataLoadService {
                 batchMap.put(cachedFeature.getFaceId(), cachedFeature);
 
                 if (batchMap.size() >= BATCH_SIZE) {
-                    faceCacheService.getFaceFeatureMap().putAll(new HashMap<>(batchMap));
+                    faceCacheService.getFaceFeatureMap().putAll(batchMap);
                     long total = totalFeaturesLoaded.addAndGet(batchMap.size());
 
                     if (total % LOG_INTERVAL == 0) {

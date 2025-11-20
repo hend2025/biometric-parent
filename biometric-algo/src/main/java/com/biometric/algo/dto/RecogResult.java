@@ -23,6 +23,6 @@ public class RecogResult implements Serializable {
 
     private float minScore;
 
-    private ComparatorScore comparatorScore;
+    private ComparatorDetails details;
 
 }

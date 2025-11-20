@@ -24,9 +24,11 @@ public class FaceRecogAggregator
     private transient float[] inputFloatFeature;
     private transient int[] inputBinaryFeature;
 
-    RecogParam params;
+    RecogParam recogParam;
 
     public FaceRecogAggregator(RecogParam params) {
+        this.recogParam = params;
+
         this.inputFeature = params.getFeatures().get(0);
         this.threshold = params.getThreshold();
         this.topN = params.getTopN();
