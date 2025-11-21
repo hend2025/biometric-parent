@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.util.List;
 
 @lombok.Data
-public class RecogParam implements Serializable {
+public class CompareParams implements Serializable {
 
     List<byte[]> features;
 

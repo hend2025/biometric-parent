@@ -5,7 +5,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 @Data
-public class RecogResult implements Serializable {
+public class CompareResult implements Serializable {
 
     private String psnTmplNo;
 
@@ -23,6 +23,17 @@ public class RecogResult implements Serializable {
 
     private float minScore;
 
-    private ComparatorDetails details;
+    private compareDetails details;
+
+    @Data
+    public static class compareDetails implements Serializable {
+
+        private String faceId1;
+
+        private String faceId2;
+
+        private float score;
+
+    }
 
 }

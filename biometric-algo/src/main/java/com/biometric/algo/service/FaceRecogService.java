@@ -2,8 +2,8 @@ package com.biometric.algo.service;
 
 import com.biometric.algo.aggregator.FaceRecogAggregator;
 import com.biometric.algo.dto.CachedFaceFeature;
-import com.biometric.algo.dto.RecogParam;
-import com.biometric.algo.dto.RecogResult;
+import com.biometric.algo.dto.CompareParams;
+import com.biometric.algo.dto.CompareResult;
 import com.hazelcast.map.IMap;
 import com.hazelcast.query.Predicate;
 import com.hazelcast.query.Predicates;
@@ -26,7 +26,7 @@ public class FaceRecogService {
         this.faceFeatureMap = faceCacheService.getFaceFeatureMap();
     }
 
-    public List<RecogResult> recogOneToMany(RecogParam params) {
+    public List<CompareResult> recogOneToMany(CompareParams params) {
         if (params == null) {
             throw new IllegalArgumentException("RecogParam cannot be null");
         }
@@ -41,7 +41,7 @@ public class FaceRecogService {
             throw new IllegalArgumentException("topN must be between 1 and 100, got: " + params.getTopN());
         }
 
-        List<RecogResult> result = null;
+        List<CompareResult> result = null;
         long startTime = System.currentTimeMillis();
         FaceRecogAggregator aggregator = new FaceRecogAggregator(params);
         if(params.getGroups() == null || CollectionUtils.isEmpty(params.getGroups())){

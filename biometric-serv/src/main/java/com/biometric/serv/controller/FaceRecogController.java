@@ -1,15 +1,10 @@
 package com.biometric.serv.controller;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.biometric.algo.dto.FaceDataResponse;
-import com.biometric.algo.dto.RecogParam;
-import com.biometric.algo.dto.RecogResult;
-import com.biometric.algo.dto.SocketResponse;
+import com.biometric.algo.dto.CompareParams;
+import com.biometric.algo.dto.CompareResult;
 import com.biometric.algo.service.SocketService;
 import com.biometric.algo.service.FaceRecogService;
-import com.biometric.algo.util.ImageToBase64Util;
 import com.biometric.serv.entity.FaceFtur;
 import com.biometric.serv.mapper.FaceFturMapper;
 import org.slf4j.Logger;
@@ -106,13 +101,13 @@ public class FaceRecogController {
             setGroupIds = Arrays.asList(groupIds.split(","));
         }
 
-        RecogParam recogParam = new RecogParam();
+        CompareParams recogParam = new CompareParams();
         recogParam.setFeatures(features);
         recogParam.setGroups(setGroupIds);
         recogParam.setThreshold(threshold);
         recogParam.setTopN(topN);
 
-        List<RecogResult> resultList = faceSearchService.recogOneToMany(recogParam);
+        List<CompareResult> resultList = faceSearchService.recogOneToMany(recogParam);
 
         log.info("Face recognition completed for personId: {}, found {} matches", personId, resultList.size());
         return ResponseEntity.ok(resultList);

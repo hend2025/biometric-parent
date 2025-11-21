@@ -1,9 +1,8 @@
 package com.biometric.algo.aggregator;
 
 import com.biometric.algo.dto.CachedFaceFeature;
-import com.biometric.algo.dto.ComparatorDetails; // 引入 ComparatorDetails
-import com.biometric.algo.dto.RecogParam;
-import com.biometric.algo.dto.RecogResult;
+import com.biometric.algo.dto.CompareParams;
+import com.biometric.algo.dto.CompareResult;
 import com.biometric.algo.util.Face303JavaCalcuater;
 import com.hazelcast.aggregation.Aggregator;
 import org.springframework.util.CollectionUtils;
@@ -12,7 +11,7 @@ import java.io.Serializable;
 import java.util.*;
 
 public class FaceRecogAggregator
-        implements Aggregator<Map.Entry<String, CachedFaceFeature>, List<RecogResult>>, Serializable {
+        implements Aggregator<Map.Entry<String, CachedFaceFeature>, List<CompareResult>>, Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -22,10 +21,10 @@ public class FaceRecogAggregator
     private transient List<float[]> inputFloatFeatures;
     private transient List<int[]> inputBinaryFeatures;
 
-    private PriorityQueue<RecogResult> localTopNHeap;
-    private RecogParam recogParam;
+    private PriorityQueue<CompareResult> localTopNHeap;
+    private CompareParams recogParam;
 
-    public FaceRecogAggregator(RecogParam params) {
+    public FaceRecogAggregator(CompareParams params) {
         this.recogParam = params;
         this.localTopNHeap = new PriorityQueue<>(params.getTopN(), new RecogResultScoreComparator());
         // 构造时尝试初始化，本地调用有效
@@ -119,17 +118,17 @@ public class FaceRecogAggregator
 
     private void addToHeap(CachedFaceFeature candidate, float maxScore, float minScore) {
         if (localTopNHeap.size() < recogParam.getTopN()) {
-            RecogResult result = buildResult(candidate, maxScore, minScore);
+            CompareResult result = buildResult(candidate, maxScore, minScore);
             localTopNHeap.add(result);
         } else if (maxScore > localTopNHeap.peek().getScore()) {
             localTopNHeap.poll();
-            RecogResult result = buildResult(candidate, maxScore, minScore);
+            CompareResult result = buildResult(candidate, maxScore, minScore);
             localTopNHeap.add(result);
         }
     }
 
-    private RecogResult buildResult(CachedFaceFeature candidate, float maxScore, float minScore) {
-        RecogResult result = new RecogResult();
+    private CompareResult buildResult(CachedFaceFeature candidate, float maxScore, float minScore) {
+        CompareResult result = new CompareResult();
         result.setPsnTmplNo(candidate.getPsnTmplNo());
         result.setFaceId(candidate.getFaceId());
         result.setMatched(true);
@@ -145,7 +144,7 @@ public class FaceRecogAggregator
         result.setMinFaceId(candidate.getFaceId());
 
         // 核心：填充 Details
-        ComparatorDetails details = new ComparatorDetails();
+        CompareResult.compareDetails details = new CompareResult.compareDetails();
         details.setScore(maxScore);
         details.setFaceId2(candidate.getFaceId());
         // faceId1 代表输入源的ID，由于RecogParam仅传入特征列表无ID，此处可留空或根据业务需求传递索引
@@ -164,7 +163,7 @@ public class FaceRecogAggregator
         if (other.localTopNHeap == null || other.localTopNHeap.isEmpty()) {
             return;
         }
-        for (RecogResult otherResult : other.localTopNHeap) {
+        for (CompareResult otherResult : other.localTopNHeap) {
             if (this.localTopNHeap.size() < recogParam.getTopN()) {
                 this.localTopNHeap.add(otherResult);
             } else if (otherResult.getScore() > this.localTopNHeap.peek().getScore()) {
@@ -175,19 +174,19 @@ public class FaceRecogAggregator
     }
 
     @Override
-    public List<RecogResult> aggregate() {
+    public List<CompareResult> aggregate() {
         if (localTopNHeap == null || localTopNHeap.isEmpty()) {
             return new ArrayList<>();
         }
-        List<RecogResult> results = new ArrayList<>(localTopNHeap);
+        List<CompareResult> results = new ArrayList<>(localTopNHeap);
         results.sort((r1, r2) -> Float.compare(r2.getScore(), r1.getScore()));
         return results;
     }
 
-    private static class RecogResultScoreComparator implements Comparator<RecogResult>, Serializable {
+    private static class RecogResultScoreComparator implements Comparator<CompareResult>, Serializable {
         private static final long serialVersionUID = 1L;
         @Override
-        public int compare(RecogResult r1, RecogResult r2) {
+        public int compare(CompareResult r1, CompareResult r2) {
             return Float.compare(r1.getScore(), r2.getScore());
         }
     }
