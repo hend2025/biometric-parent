@@ -43,8 +43,6 @@ public class FaceAlgoServiceTest {
             JSONObject images = new JSONObject();
             images.put("0", imageBase64);
 
-            System.out.println();
-
             String extractedFeature = null;
 
             // ==================== 测试 1: 标准特征提取 (Y01.00) ====================

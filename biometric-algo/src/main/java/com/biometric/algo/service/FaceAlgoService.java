@@ -5,36 +5,32 @@ import com.biometric.algo.config.AlgoSocketConfig;
 import com.biometric.algo.dto.*;
 import com.biometric.algo.socket.AlgoSocketClient;
 import com.biometric.algo.strategy.ComparisonStrategy;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 
+import static com.biometric.algo.dto.AlgoCommand.*;
+
 /**
- * 人脸算法服务
+ * 人脸算法核心服务
+ * 封装具体的算法指令调用
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class FaceAlgoService {
 
     private final AlgoSocketClient socketClient;
     private final AlgoSocketConfig config;
     private final Map<String, ComparisonStrategy> strategyMap;
 
-    public FaceAlgoService(AlgoSocketClient socketClient,
-                           AlgoSocketConfig config,
-                           Map<String, ComparisonStrategy> strategyMap) {
-        this.socketClient = socketClient;
-        this.config = config;
-        this.strategyMap = strategyMap;
-    }
-
-    // ==================== 1. 人脸比对 ====================
-
-    public SocketRecogResult compare(String type, JSONObject data1, JSONObject data2) {
-        ComparisonStrategy strategy = strategyMap.get(type);
+    // ==================== 1. 人脸比对 (1:1) ====================
+    public SocketRecogResult compare(String strategyType, JSONObject data1, JSONObject data2) {
+        ComparisonStrategy strategy = strategyMap.get(strategyType);
         if (strategy == null) {
-            throw new IllegalArgumentException("不支持的比对策略: " + type);
+            throw new IllegalArgumentException("未找到支持的比对策略: " + strategyType);
         }
         return strategy.compare(data1, data2, config.getDefaultFaceVersion());
     }
@@ -57,17 +53,17 @@ public class FaceAlgoService {
      * Y01.00 标准特征提取
      */
     public SocketFaceFeature faceExtractFeature(JSONObject images, boolean rotate, boolean needQuality) {
-        AlgoRequest request = AlgoRequest.builder()
-                .command(AlgoCommand.EXTRACT_FEATURE)
-                .version(config.getDefaultFaceVersion())
-                .build();
-
-        request.addParam("IMAGES", images)
-                .addParam("NUM", images.size())
-                .addParam("ROTATE", rotate)
-                .addParam("QUALITY", needQuality);
-
-        return socketClient.execute(request, SocketFaceFeature.class);
+        return socketClient.execute(
+                AlgoRequest.builder()
+                        .command(EXTRACT_FEATURE)
+                        .version(config.getDefaultFaceVersion())
+                        .build()
+                        .addParam(KEY_IMAGES, images)
+                        .addParam(KEY_NUM, images.size())
+                        .addParam("ROTATE", rotate)
+                        .addParam(KEY_QUALITY, needQuality),
+                SocketFaceFeature.class
+        );
     }
 
     /**
@@ -75,16 +71,15 @@ public class FaceAlgoService {
      */
     public SocketFaceFeature faceExtractMobile(JSONObject images, JSONObject facesRect, boolean needQuality) {
         AlgoRequest request = AlgoRequest.builder()
-                .command(AlgoCommand.EXTRACT_MOBILE)
+                .command(EXTRACT_MOBILE)
                 .version(config.getDefaultFaceVersion())
-                .build();
+                .build()
+                .addParam(KEY_IMAGES, images)
+                .addParam(KEY_NUM, images.size())
+                .addParam(KEY_QUALITY, needQuality);
 
-        request.addParam("IMAGES", images)
-                .addParam("NUM", images.size())
-                .addParam("QUALITY", needQuality);
-
-        if (facesRect != null) {
-            request.addParam("FACES", facesRect);
+        if (facesRect != null && !facesRect.isEmpty()) {
+            request.addParam(KEY_FACES, facesRect);
         }
 
         return socketClient.execute(request, SocketFaceFeature.class);
@@ -92,42 +87,37 @@ public class FaceAlgoService {
 
     /**
      * Y01.02 多人脸特征提取
-     * 包含特殊版本号逻辑处理
      */
     public SocketMultiFaceFeature faceExtractMultiFace(String imageBase64, boolean needQuality) {
-        // 特殊业务逻辑：Y01.02 需要切换版本号
-        String version = config.getDefaultFaceVersion();
-        if ("FACE310".equals(version)) {
-            version = "NXFACEA102";
-        }
+        // 业务特定逻辑：Y01.02 接口在基础版本为 FACE310 时，需切换特定版本号
+        String version = resolveMultiFaceVersion(config.getDefaultFaceVersion());
 
-        AlgoRequest request = AlgoRequest.builder()
-                .command(AlgoCommand.EXTRACT_MULTI)
-                .version(version)
-                .build();
-
-        request.addParam("PIMAGE", imageBase64)
-                .addParam("QUALITY", needQuality);
-
-        return socketClient.execute(request, SocketMultiFaceFeature.class);
+        return socketClient.execute(
+                AlgoRequest.builder()
+                        .command(EXTRACT_MULTI)
+                        .version(version)
+                        .build()
+                        .addParam("PIMAGE", imageBase64)
+                        .addParam(KEY_QUALITY, needQuality),
+                SocketMultiFaceFeature.class
+        );
     }
 
     // ==================== 3. 图像处理与检测 ====================
 
     /**
-     * Y03.00/Y03.01 人脸裁剪 (整合了带阈值和不带阈值的逻辑)
+     * Y03.00/Y03.01 人脸裁剪
      */
     public SocketImageProcessResult faceCrop(JSONObject images, int width, int height, boolean stdImg, JSONObject thresholds) {
         boolean useQuality = (thresholds != null && !thresholds.isEmpty());
-        AlgoCommand command = useQuality ? AlgoCommand.FACE_CROP_WITH_QUALITY : AlgoCommand.FACE_CROP;
+        AlgoCommand command = useQuality ? FACE_CROP_WITH_QUALITY : FACE_CROP;
 
         AlgoRequest request = AlgoRequest.builder()
                 .command(command)
-                .version("QUALITY")
-                .build();
-
-        request.addParam("IMAGES", images)
-                .addParam("NUM", images.size())
+                .version(VERSION_QUALITY)
+                .build()
+                .addParam(KEY_IMAGES, images)
+                .addParam(KEY_NUM, images.size())
                 .addParam("WIDTH", width)
                 .addParam("HEIGHT", height);
 
@@ -144,49 +134,49 @@ public class FaceAlgoService {
      * Y03.02 去网格
      */
     public SocketImageProcessResult imageRemoveGrid(JSONObject images) {
-        AlgoRequest request = AlgoRequest.builder()
-                .command(AlgoCommand.IMAGE_REMOVE_GRID)
-                .version("QUALITY")
-                .build();
-
-        request.addParam("IMAGES", images)
-                .addParam("NUM", images.size());
-
-        return socketClient.execute(request, SocketImageProcessResult.class);
+        return socketClient.execute(
+                createQualityRequest(IMAGE_REMOVE_GRID, images),
+                SocketImageProcessResult.class
+        );
     }
 
     /**
      * Y03.03 人脸检测
      */
     public SocketFaceDetectionResult faceDetect(JSONObject images) {
-        AlgoRequest request = AlgoRequest.builder()
-                .command(AlgoCommand.FACE_DETECT)
-                .version("QUALITY")
-                .build();
-
-        request.addParam("IMAGES", images)
-                .addParam("NUM", images.size());
-
-        return socketClient.execute(request, SocketFaceDetectionResult.class);
+        return socketClient.execute(
+                createQualityRequest(FACE_DETECT, images),
+                SocketFaceDetectionResult.class
+        );
     }
 
     /**
      * Y03.04 人脸质量评估
      */
     public SocketFaceDetectResult faceQualityCheck(JSONObject images, JSONObject facesRect) {
-        AlgoRequest request = AlgoRequest.builder()
-                .command(AlgoCommand.QUALITY_CHECK)
-                .version("QUALITY")
-                .build();
-
-        request.addParam("IMAGES", images)
-                .addParam("NUM", images.size());
-
-        if (facesRect != null) {
-            request.addParam("FACES", facesRect);
+        AlgoRequest request = createQualityRequest(QUALITY_CHECK, images);
+        if (facesRect != null && !facesRect.isEmpty()) {
+            request.addParam(KEY_FACES, facesRect);
         }
-
         return socketClient.execute(request, SocketFaceDetectResult.class);
+    }
+
+    // ==================== Private Helper Methods ====================
+
+    private AlgoRequest createQualityRequest(AlgoCommand command, JSONObject images) {
+        return AlgoRequest.builder()
+                .command(command)
+                .version(VERSION_QUALITY)
+                .build()
+                .addParam(KEY_IMAGES, images)
+                .addParam(KEY_NUM, images.size());
+    }
+
+    private String resolveMultiFaceVersion(String currentVersion) {
+        if ("FACE310".equals(currentVersion)) {
+            return "NXFACEA102";
+        }
+        return currentVersion;
     }
 
 }
