@@ -1,6 +1,6 @@
 package com.biometric.algo.dto;
 
-import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.annotation.JSONField;
 import lombok.Data;
 
 /**
@@ -10,8 +10,21 @@ import lombok.Data;
 public class ImageProcessValue {
     
     /**
-     * 图片数据组
-     * 格式：{"images": {"0": "base64...", "1": "base64..."}, "algtype": 1, "num": 2}
+     * 图片数据（JSON字符串）
+     * 格式："{\"0\":\"base64...\",\"1\":\"base64...\"}"
      */
-    private JSONObject IMAGES;
+    @JSONField(name = "images")
+    private String images;
+    
+    /**
+     * 算法类型
+     */
+    @JSONField(name = "algtype")
+    private Integer algtype;
+    
+    /**
+     * 图片数量
+     */
+    @JSONField(name = "num")
+    private Integer num;
 }

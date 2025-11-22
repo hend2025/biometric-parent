@@ -130,13 +130,24 @@ public class SocketServiceRefactored {
      * @return 多人脸特征提取结果，RETURNVALUE为数组，每项包含face、feat、quality
      */
     public SocketMultiFaceFeature faceExtractMultiFace(String imageBase64, boolean needQuality) {
+        // Y01.02接口需要使用NXFACE系列版本，不是FACE系列
+        String version = config.getDefaultFaceVersion();
+        // 如果是FACE310，转换为对应的NXFACE版本
+        if ("FACE310".equals(version)) {
+            version = "NXFACEA102";
+        }
+        
+        log.debug("Y01.02 using VERSION: {}", version);
+        
         JSONObject params = AlgoRequestBuilder.newBuilder()
                 .funId("Y01.02")
                 .pImage(imageBase64)
                 .algType(ALG_TYPE_FACE_VISIBLE)
                 .quality(needQuality)
-                .version(config.getDefaultFaceVersion())
+                .version(version)
                 .build();
+        
+        log.debug("Y01.02 request params: {}", params.toJSONString());
         
         String jsonResponse = socketClient.sendRequest(params);
         return ResponseFactory.parseMultiFaceFeature(jsonResponse);

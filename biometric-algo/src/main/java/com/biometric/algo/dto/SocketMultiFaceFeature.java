@@ -4,15 +4,14 @@ import com.alibaba.fastjson.annotation.JSONField;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-import java.util.List;
-
 /**
  * Y01.02 多人脸特征提取响应
+ * 注意：RETURNVALUE是JSON字符串，需要手动解析
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class SocketMultiFaceFeature extends SocketResponse<List<MultiFaceExtractResult>> {
+public class SocketMultiFaceFeature extends SocketResponse<String> {
     
     @JSONField(name = "RETURNVALUE")
-    private List<MultiFaceExtractResult> returnValue;
+    private String returnValue;
 }

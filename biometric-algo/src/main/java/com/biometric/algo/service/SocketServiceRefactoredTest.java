@@ -1,11 +1,14 @@
 package com.biometric.algo.service;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.biometric.algo.config.AlgoSocketConfig;
 import com.biometric.algo.dto.*;
 import com.biometric.algo.exception.AlgoException;
 import com.biometric.algo.exception.SocketConnectionException;
 import com.biometric.algo.socket.SocketClient;
+
+import java.util.List;
 
 /**
  * SocketServiceRefactored 测试类
@@ -149,158 +152,199 @@ public class SocketServiceRefactoredTest {
             }
             
             // ==================== 测试6: 多人脸特征提取 ====================
-            System.out.println("【测试6】Y01.02 多人脸特征提取");
-            System.out.println("单张大图提取多个人脸特征");
-            System.out.println("----------------------------------------");
-            SocketMultiFaceFeature multiFaceResult = service.faceExtractMultiFace(image, true);
-            System.out.println("返回码: " + multiFaceResult.getReturnId());
-            System.out.println("返回描述: " + multiFaceResult.getReturnDesc());
-            
-            if (multiFaceResult.getReturnId() == 0 && multiFaceResult.getReturnValue() != null) {
-                System.out.println("✓ 多人脸特征提取成功");
-                System.out.println("检测到人脸数量: " + multiFaceResult.getReturnValue().size());
+            try {
+                System.out.println("【测试6】Y01.02 多人脸特征提取");
+                System.out.println("单张大图提取多个人脸特征");
+                System.out.println("----------------------------------------");
+                SocketMultiFaceFeature multiFaceResult = service.faceExtractMultiFace(image, true);
+                System.out.println("返回码: " + multiFaceResult.getReturnId());
+                System.out.println("返回描述: " + multiFaceResult.getReturnDesc());
                 
-                // 显示每个人脸的信息
-                for (int i = 0; i < multiFaceResult.getReturnValue().size(); i++) {
-                    MultiFaceExtractResult face = multiFaceResult.getReturnValue().get(i);
-                    System.out.println("  人脸" + (i + 1) + ":");
-                    System.out.println("    位置: " + face.getFace());
-                    System.out.println("    特征长度: " + (face.getFeat() != null ? face.getFeat().length() : 0));
+                if (multiFaceResult.getReturnId() == 0 && multiFaceResult.getReturnValue() != null) {
+                    System.out.println("✓ 多人脸特征提取成功");
                     
-                    // 显示质量信息
-                    if (face.getQuality() != null) {
-                        MultiFaceExtractResult.QualityInfo quality = face.getQuality();
-                        System.out.println("    质量评估:");
-                        System.out.println("      模糊度: " + quality.getBlurred());
-                        System.out.println("      对比度: " + quality.getContrast());
-                        System.out.println("      亮度: " + quality.getLuminance());
-                        System.out.println("      俯仰角: " + quality.getPitch());
-                        System.out.println("      翻滚角: " + quality.getRoll());
-                        System.out.println("      偏航角: " + quality.getYaw());
+                    // 手动解析JSON字符串
+                    List<MultiFaceExtractResult> faces = JSON.parseArray(multiFaceResult.getReturnValue(), MultiFaceExtractResult.class);
+                    if (faces != null) {
+                        System.out.println("检测到人脸数量: " + faces.size());
+                        
+                        // 显示每个人脸的信息
+                        for (int i = 0; i < faces.size(); i++) {
+                            MultiFaceExtractResult face = faces.get(i);
+                            System.out.println("  人脸" + (i + 1) + ":");
+                            System.out.println("    位置: " + face.getFace());
+                            System.out.println("    特征长度: " + (face.getFeat() != null ? face.getFeat().length() : 0));
+                            
+                            // 显示质量信息
+                            if (face.getQuality() != null) {
+                                MultiFaceExtractResult.QualityInfo quality = face.getQuality();
+                                System.out.println("    质量评估:");
+                                System.out.println("      模糊度: " + quality.getBlurred());
+                                System.out.println("      对比度: " + quality.getContrast());
+                                System.out.println("      亮度: " + quality.getLuminance());
+                                System.out.println("      俯仰角: " + quality.getPitch());
+                                System.out.println("      翻滚角: " + quality.getRoll());
+                                System.out.println("      偏航角: " + quality.getYaw());
+                            }
+                        }
                     }
+                } else {
+                    System.out.println("✗ 多人脸特征提取失败");
                 }
-            } else {
-                System.out.println("✗ 多人脸特征提取失败");
+            } catch (Exception e) {
+                System.out.println("✗ 测试6异常: " + e.getClass().getName());
+                System.out.println("  消息: " + e.getMessage());
+                if (e.getCause() != null) {
+                    System.out.println("  根本原因: " + e.getCause().getMessage());
+                }
+                e.printStackTrace();
             }
             System.out.println();
             
             // ==================== 测试7: 人脸裁剪（标准） ====================
-            System.out.println("【测试7】Y03.00 人脸裁剪（标准裁剪）");
-            System.out.println("使用 Builder Pattern 构建请求");
-            System.out.println("----------------------------------------");
-            SocketImageProcessResult cropResult = service.faceCrop(images, 358, 441, true);
-            System.out.println("返回码: " + cropResult.getReturnId());
-            System.out.println("返回描述: " + cropResult.getReturnDesc());
-            
-            if (cropResult.getReturnId() == 0) {
-                System.out.println("✓ 裁剪成功");
-                ImageProcessValue cropValue = cropResult.getReturnValue();
-                if (cropValue != null && cropValue.getIMAGES() != null) {
-                    JSONObject imageData = cropValue.getIMAGES().getJSONObject("images");
-                    if (imageData != null) {
-                        System.out.println("裁剪后图片数量: " + imageData.size());
-                    }
-                }
+            try {
+                System.out.println("【测试7】Y03.00 人脸裁剪（标准裁剪）");
+                System.out.println("使用 Builder Pattern 构建请求");
+                System.out.println("----------------------------------------");
+                SocketImageProcessResult cropResult = service.faceCrop(images, 358, 441, true);
+                System.out.println("返回码: " + cropResult.getReturnId());
+                System.out.println("返回描述: " + cropResult.getReturnDesc());
                 
-                // 显示处理详情
-                if (cropResult.getDetail() != null) {
-                    System.out.println("处理详情: " + cropResult.getDetail());
+                if (cropResult.getReturnId() == 0) {
+                    System.out.println("✓ 裁剪成功");
+                    if (cropResult.getReturnValue() != null) {
+                        // 手动解析RETURNVALUE字符串
+                        ImageProcessReturnValue returnValue = JSON.parseObject(cropResult.getReturnValue(), ImageProcessReturnValue.class);
+                        if (returnValue != null && returnValue.getIMAGES() != null) {
+                            ImageProcessValue imagesData = returnValue.getIMAGES();
+                            System.out.println("裁剪后图片数量: " + imagesData.getNum());
+                            System.out.println("算法类型: " + imagesData.getAlgtype());
+                        }
+                    }
+                    
+                    // 显示处理详情
+                    if (cropResult.getDetail() != null) {
+                        System.out.println("处理详情: " + cropResult.getDetail());
+                    }
+                } else {
+                    System.out.println("✗ 裁剪失败");
                 }
-            } else {
-                System.out.println("✗ 裁剪失败");
+            } catch (Exception e) {
+                System.out.println("✗ 测试7异常: " + e.getMessage());
+                System.out.println("  原因: 算法引擎可能不支持此接口");
             }
             System.out.println();
             
             // ==================== 测试8: 人脸裁剪（带质量评估） ====================
-            System.out.println("【测试8】Y03.01 人脸裁剪（带质量评估）");
-            System.out.println("配置质量评估阈值");
-            System.out.println("----------------------------------------");
-            
-            // 配置质量评估阈值
-            JSONObject thresholds = new JSONObject();
-            thresholds.put("MULTI", 1);              // 裁剪多人脸
-            thresholds.put("MINDETECTSIZE", 50);     // 最小检测框
-            thresholds.put("POSETHRESHOLD", 0.3);    // 姿态阈值
-            thresholds.put("BLURREDTHRESHOLD", 0.5); // 模糊度阈值
-            
-            SocketImageProcessResult cropQualityResult = service.faceCropWithQuality(images, 358, 441, thresholds);
-            System.out.println("返回码: " + cropQualityResult.getReturnId());
-            System.out.println("返回描述: " + cropQualityResult.getReturnDesc());
-            
-            if (cropQualityResult.getReturnId() == 0) {
-                System.out.println("✓ 带质量评估的裁剪成功");
-                ImageProcessValue cropQualityValue = cropQualityResult.getReturnValue();
-                if (cropQualityValue != null && cropQualityValue.getIMAGES() != null) {
-                    JSONObject imageData = cropQualityValue.getIMAGES().getJSONObject("images");
-                    if (imageData != null) {
-                        System.out.println("裁剪后图片数量: " + imageData.size());
-                    }
-                }
+            try {
+                System.out.println("【测试8】Y03.01 人脸裁剪（带质量评估）");
+                System.out.println("配置质量评估阈值");
+                System.out.println("----------------------------------------");
                 
-                // 显示处理详情
-                if (cropQualityResult.getDetail() != null) {
-                    System.out.println("处理详情: " + cropQualityResult.getDetail());
+                // 配置质量评估阈值
+                JSONObject thresholds = new JSONObject();
+                thresholds.put("MULTI", 1);              // 裁剪多人脸
+                thresholds.put("MINDETECTSIZE", 50);     // 最小检测框
+                thresholds.put("POSETHRESHOLD", 0.3);    // 姿态阈值
+                thresholds.put("BLURREDTHRESHOLD", 0.5); // 模糊度阈值
+                
+                SocketImageProcessResult cropQualityResult = service.faceCropWithQuality(images, 358, 441, thresholds);
+                System.out.println("返回码: " + cropQualityResult.getReturnId());
+                System.out.println("返回描述: " + cropQualityResult.getReturnDesc());
+                
+                if (cropQualityResult.getReturnId() == 0) {
+                    System.out.println("✓ 带质量评估的裁剪成功");
+                    if (cropQualityResult.getReturnValue() != null) {
+                        // 手动解析RETURNVALUE字符串
+                        ImageProcessReturnValue returnValue = JSON.parseObject(cropQualityResult.getReturnValue(), ImageProcessReturnValue.class);
+                        if (returnValue != null && returnValue.getIMAGES() != null) {
+                            ImageProcessValue imagesData = returnValue.getIMAGES();
+                            System.out.println("裁剪后图片数量: " + imagesData.getNum());
+                        }
+                    }
+                    
+                    // 显示处理详情
+                    if (cropQualityResult.getDetail() != null) {
+                        System.out.println("处理详情: " + cropQualityResult.getDetail());
+                    }
+                } else {
+                    System.out.println("✗ 带质量评估的裁剪失败");
                 }
-            } else {
-                System.out.println("✗ 带质量评估的裁剪失败");
+            } catch (Exception e) {
+                System.out.println("✗ 测试8异常: " + e.getMessage());
+                System.out.println("  原因: 算法引擎可能不支持此接口");
             }
             System.out.println();
             
             // ==================== 测试9: 去网格 ====================
-            System.out.println("【测试9】Y03.02 去网格");
-            System.out.println("处理带网格的图片");
-            System.out.println("----------------------------------------");
-            SocketImageProcessResult removeGridResult = service.imageRemoveGrid(images);
-            System.out.println("返回码: " + removeGridResult.getReturnId());
-            System.out.println("返回描述: " + removeGridResult.getReturnDesc());
-            
-            if (removeGridResult.getReturnId() == 0) {
-                System.out.println("✓ 去网格成功");
-                ImageProcessValue removeGridValue = removeGridResult.getReturnValue();
-                if (removeGridValue != null && removeGridValue.getIMAGES() != null) {
-                    JSONObject imageData = removeGridValue.getIMAGES().getJSONObject("images");
-                    if (imageData != null) {
-                        System.out.println("处理后图片数量: " + imageData.size());
-                    }
-                }
+            try {
+                System.out.println("【测试9】Y03.02 去网格");
+                System.out.println("处理带网格的图片");
+                System.out.println("----------------------------------------");
+                SocketImageProcessResult removeGridResult = service.imageRemoveGrid(images);
+                System.out.println("返回码: " + removeGridResult.getReturnId());
+                System.out.println("返回描述: " + removeGridResult.getReturnDesc());
                 
-                // 显示处理详情
-                if (removeGridResult.getDetail() != null) {
-                    System.out.println("处理详情: " + removeGridResult.getDetail());
+                if (removeGridResult.getReturnId() == 0) {
+                    System.out.println("✓ 去网格成功");
+                    if (removeGridResult.getReturnValue() != null) {
+                        // 手动解析RETURNVALUE字符串
+                        ImageProcessReturnValue returnValue = JSON.parseObject(removeGridResult.getReturnValue(), ImageProcessReturnValue.class);
+                        if (returnValue != null && returnValue.getIMAGES() != null) {
+                            ImageProcessValue imagesData = returnValue.getIMAGES();
+                            System.out.println("处理后图片数量: " + imagesData.getNum());
+                        }
+                    }
+                    
+                    // 显示处理详情
+                    if (removeGridResult.getDetail() != null) {
+                        System.out.println("处理详情: " + removeGridResult.getDetail());
+                    }
+                } else {
+                    System.out.println("✗ 去网格失败");
                 }
-            } else {
-                System.out.println("✗ 去网格失败");
+            } catch (Exception e) {
+                System.out.println("✗ 测试9异常: " + e.getMessage());
+                System.out.println("  原因: 算法引擎可能不支持此接口");
             }
             System.out.println();
             
             // ==================== 测试10: 人脸检测 ====================
-            System.out.println("【测试10】Y03.03 人脸检测（获取坐标和关键点）");
-            System.out.println("检测人脸位置和关键点信息");
-            System.out.println("----------------------------------------");
-            SocketFaceDetectionResult detectionResult = service.faceDetect(images);
-            System.out.println("返回码: " + detectionResult.getReturnId());
-            System.out.println("返回描述: " + detectionResult.getReturnDesc());
-            
-            if (detectionResult.getReturnId() == 0) {
-                System.out.println("✓ 人脸检测成功");
-                FaceDetectionValue detectionValue = detectionResult.getReturnValue();
-                if (detectionValue != null && detectionValue.getValue() != null) {
-                    JSONObject detections = detectionValue.getValue();
-                    System.out.println("检测到的图片数量: " + detections.size());
-                    
-                    // 显示每张图的检测结果
-                    for (String key : detections.keySet()) {
-                        String detectionJson = detections.getString(key);
-                        System.out.println("  图片" + key + "检测结果: " + detectionJson);
-                    }
-                }
+            try {
+                System.out.println("【测试10】Y03.03 人脸检测（获取坐标和关键点）");
+                System.out.println("检测人脸位置和关键点信息");
+                System.out.println("----------------------------------------");
+                SocketFaceDetectionResult detectionResult = service.faceDetect(images);
+                System.out.println("返回码: " + detectionResult.getReturnId());
+                System.out.println("返回描述: " + detectionResult.getReturnDesc());
                 
-                // 显示处理详情
-                if (detectionResult.getDetail() != null) {
-                    System.out.println("处理详情: " + detectionResult.getDetail());
+                if (detectionResult.getReturnId() == 0) {
+                    System.out.println("✓ 人脸检测成功");
+                    if (detectionResult.getReturnValue() != null) {
+                        // 手动解析RETURNVALUE字符串
+                        FaceDetectionValue detectionValue = JSON.parseObject(detectionResult.getReturnValue(), FaceDetectionValue.class);
+                        if (detectionValue != null && detectionValue.getValue() != null) {
+                            JSONObject detections = detectionValue.getValue();
+                            System.out.println("检测到的图片数量: " + detections.size());
+                            
+                            // 显示每张图的检测结果
+                            for (String key : detections.keySet()) {
+                                String detectionJson = detections.getString(key);
+                                System.out.println("  图片" + key + "检测结果: " + detectionJson);
+                            }
+                        }
+                    }
+                    
+                    // 显示处理详情
+                    if (detectionResult.getDetail() != null) {
+                        System.out.println("处理详情: " + detectionResult.getDetail());
+                    }
+                } else {
+                    System.out.println("✗ 人脸检测失败");
                 }
-            } else {
-                System.out.println("✗ 人脸检测失败");
+            } catch (Exception e) {
+                System.out.println("✗ 测试10异常: " + e.getMessage());
+                System.out.println("  原因: 算法引擎可能不支持此接口");
             }
             System.out.println();
             
@@ -320,19 +364,6 @@ public class SocketServiceRefactoredTest {
             System.out.println("  8. Y03.01 人脸裁剪（带质量评估）");
             System.out.println("  9. Y03.02 去网格");
             System.out.println("  10. Y03.03 人脸检测");
-            System.out.println();
-            System.out.println("✓ 设计模式应用成功:");
-            System.out.println("  - Builder Pattern: 清晰的请求参数构建");
-            System.out.println("  - Strategy Pattern: 灵活的比对策略切换");
-            System.out.println("  - Factory Pattern: 统一的响应解析");
-            System.out.println("  - Template Method: 策略类模板方法");
-            System.out.println("  - Try-with-Resources: 自动资源管理");
-            System.out.println();
-            System.out.println("✓ 代码改进:");
-            System.out.println("  - 强类型返回值，IDE智能提示完整");
-            System.out.println("  - 自动验证返回码，统一异常处理");
-            System.out.println("  - 代码可读性和可维护性显著提升");
-            System.out.println();
             
         } catch (SocketConnectionException e) {
             System.err.println("❌ Socket连接异常: " + e.getMessage());
