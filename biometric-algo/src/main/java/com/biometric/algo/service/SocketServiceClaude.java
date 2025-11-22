@@ -5,7 +5,7 @@ import com.biometric.algo.builder.AlgoRequestBuilder;
 import com.biometric.algo.config.AlgoSocketConfig;
 import com.biometric.algo.dto.*;
 import com.biometric.algo.factory.ResponseFactory;
-import com.biometric.algo.socket.SocketClient;
+import com.biometric.algo.socket.ClaudeSocketClient;
 import com.biometric.algo.strategy.ComparisonStrategy;
 import com.biometric.algo.strategy.FeatureToFeatureStrategy;
 import com.biometric.algo.strategy.FeatureToImageStrategy;
@@ -19,15 +19,15 @@ import java.util.Map;
 
 @Slf4j
 @Service
-public class SocketServiceRefactored {
+public class SocketServiceClaude {
     
     private static final int ALG_TYPE_FACE_VISIBLE = 1;
     
     private final AlgoSocketConfig config;
-    private final SocketClient socketClient;
+    private final ClaudeSocketClient socketClient;
     private final Map<String, ComparisonStrategy> comparisonStrategies;
     
-    public SocketServiceRefactored(AlgoSocketConfig config, SocketClient socketClient) {
+    public SocketServiceClaude(AlgoSocketConfig config, ClaudeSocketClient socketClient) {
         this.config = config;
         this.socketClient = socketClient;
         this.comparisonStrategies = initializeStrategies();
@@ -137,7 +137,7 @@ public class SocketServiceRefactored {
             version = "NXFACEA102";
         }
         
-        log.debug("Y01.02 using VERSION: {}", version);
+        log.debug("Y01.02 多人脸特征提取使用版本号: {}", version);
         
         JSONObject params = AlgoRequestBuilder.newBuilder()
                 .funId("Y01.02")
@@ -147,7 +147,7 @@ public class SocketServiceRefactored {
                 .version(version)
                 .build();
         
-        log.debug("Y01.02 request params: {}", params.toJSONString());
+        log.debug("Y01.02 请求参数: {}", params.toJSONString());
         
         String jsonResponse = socketClient.sendRequest(params);
         return ResponseFactory.parseMultiFaceFeature(jsonResponse);

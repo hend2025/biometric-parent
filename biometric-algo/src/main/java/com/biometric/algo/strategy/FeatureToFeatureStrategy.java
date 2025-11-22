@@ -2,14 +2,14 @@ package com.biometric.algo.strategy;
 
 import com.alibaba.fastjson.JSONObject;
 import com.biometric.algo.builder.AlgoRequestBuilder;
-import com.biometric.algo.socket.SocketClient;
+import com.biometric.algo.socket.ClaudeSocketClient;
 
 /**
  * Feature to Feature comparison strategy (Y00.00)
  */
 public class FeatureToFeatureStrategy extends FaceCompareStrategy {
     
-    public FeatureToFeatureStrategy(SocketClient socketClient) {
+    public FeatureToFeatureStrategy(ClaudeSocketClient socketClient) {
         super(socketClient);
     }
     

@@ -3,8 +3,8 @@ package com.biometric.serv.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.biometric.algo.dto.CompareParams;
 import com.biometric.algo.dto.CompareResult;
-import com.biometric.algo.service.SocketService;
 import com.biometric.algo.service.FaceRecogService;
+import com.biometric.algo.service.SocketServiceGemini;
 import com.biometric.serv.entity.FaceFtur;
 import com.biometric.serv.mapper.FaceFturMapper;
 import org.slf4j.Logger;
@@ -39,7 +39,7 @@ public class FaceRecogController {
     private FaceFturMapper faceFturDMapper;
 
     @Autowired
-    SocketService socketService;
+    SocketServiceGemini socketService;
 
     @PostMapping("/compareMore")
     public ResponseEntity<?> compareMore(@RequestParam(required = true) String personId,

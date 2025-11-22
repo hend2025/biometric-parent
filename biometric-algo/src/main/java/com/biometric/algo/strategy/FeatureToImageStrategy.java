@@ -2,14 +2,14 @@ package com.biometric.algo.strategy;
 
 import com.alibaba.fastjson.JSONObject;
 import com.biometric.algo.builder.AlgoRequestBuilder;
-import com.biometric.algo.socket.SocketClient;
+import com.biometric.algo.socket.ClaudeSocketClient;
 
 /**
  * Feature to Image comparison strategy (Y00.01)
  */
 public class FeatureToImageStrategy extends FaceCompareStrategy {
     
-    public FeatureToImageStrategy(SocketClient socketClient) {
+    public FeatureToImageStrategy(ClaudeSocketClient socketClient) {
         super(socketClient);
     }
     

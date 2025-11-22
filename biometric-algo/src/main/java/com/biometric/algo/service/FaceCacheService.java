@@ -13,6 +13,18 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 人脸特征缓存服务
+ * 使用Hazelcast分布式缓存管理加载的人脸特征数据
+ * 
+ * 主要功能：
+ * - 批量加载特征到缓存
+ * - 清空缓存
+ * - 获取缓存Map实例
+ * 
+ * @author biometric-algo
+ * @version 1.0
+ */
 @Service
 public class FaceCacheService {
     private static final Logger log = LoggerFactory.getLogger(FaceCacheService.class);
@@ -30,16 +42,15 @@ public class FaceCacheService {
         Map<String, CachedFaceFeature> batchMap = features.stream()
                 .collect(Collectors.toMap(CachedFaceFeature::getFaceId, Function.identity()));
         faceFeatureMap.putAll(batchMap);
-        log.info("Loaded {} features into Hazelcast cache.", batchMap.size());
+        log.info("已加载 {} 条人脸特征到Hazelcast缓存", batchMap.size());
     }
 
     public void clearCache() {
-        log.warn("Clearing all features from Hazelcast cache...");
+        log.warn("正在清空Hazelcast缓存中的所有人脸特征...");
         faceFeatureMap.clear();
     }
 
     public IMap<String, CachedFaceFeature> getFaceFeatureMap() {
         return faceFeatureMap;
     }
-
 }

@@ -5,11 +5,16 @@ import com.biometric.algo.dto.*;
 import com.biometric.algo.exception.AlgoProcessException;
 
 /**
- * Factory Pattern: 统一处理响应解析和验证
- * 所有方法遵循相同的处理流程：
+ * 响应解析工厂类
+ * 采用工厂模式统一处理算法接口响应的解析和验证
+ * 
+ * 处理流程：
  * 1. JSON解析
  * 2. 验证返回码
  * 3. 异常处理统一化
+ * 
+ * @author biometric-algo
+ * @version 1.0
  */
 public class ResponseFactory {
     
