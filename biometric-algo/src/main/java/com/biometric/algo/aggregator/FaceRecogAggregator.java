@@ -20,27 +20,15 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
     private static final long serialVersionUID = 1L;
     private static final int HAMMING_DIST_THRESHOLD = 50;
 
-    // 输入特征（不需要序列化传输到各节点，但在节点本地反序列化后使用）
     private transient List<float[]> inputFloatFeatures;
     private transient List<int[]> inputBinaryFeatures;
 
-    // 结果堆（最小堆，保留TopN）
+    private CompareParams CompareParams;
     private PriorityQueue<CompareResult> localTopNHeap;
-    private CompareParams recogParam;
-
-    // 静态内部类实现可序列化的比较器
-    private static class CompareResultComparator implements Comparator<CompareResult>, Serializable {
-        private static final long serialVersionUID = 1L;
-
-        @Override
-        public int compare(CompareResult r1, CompareResult r2) {
-            return Double.compare(r1.getScore(), r2.getScore());
-        }
-    }
 
     public FaceRecogAggregator(CompareParams params) {
-        this.recogParam = params;
-        this.localTopNHeap = new PriorityQueue<>(params.getTopN(), new CompareResultComparator());
+        this.CompareParams = params;
+        this.localTopNHeap = new PriorityQueue<>(params.getTopN(), Comparator.comparing(CompareResult::getScore));
         // 注意：构造函数是在调用端执行的，initInputFeatures 可能需要在 accumulate 首次调用时再次检查
         initInputFeatures();
     }
@@ -52,8 +40,8 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
         inputFloatFeatures = new ArrayList<>();
         inputBinaryFeatures = new ArrayList<>();
 
-        if (recogParam != null && !CollectionUtils.isEmpty(recogParam.getFeatures())) {
-            for (byte[] feature : recogParam.getFeatures()) {
+        if (CompareParams != null && !CollectionUtils.isEmpty(CompareParams.getFeatures())) {
+            for (byte[] feature : CompareParams.getFeatures()) {
                 if (feature == null || feature.length == 0) continue;
 
                 int[] binaryFeat = Face303JavaCalcuater.getBinaFeat(feature);
@@ -104,7 +92,6 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
 
             if (isSimilar) {
                 // 2.2 精筛：余弦相似度计算
-                // 懒加载：只有通过粗筛才转换浮点数组
                 if (candidateFloatFeat == null) {
                     candidateFloatFeat = Face303JavaCalcuater.toFloatArray(candidate.getFeatureData());
                 }
@@ -123,15 +110,15 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
         }
 
         // 3. 阈值判断与堆更新
-        if (passedBinaryFilter && maxScore >= recogParam.getThreshold()) {
-            if (minScore > 1.0f) minScore = maxScore; // 修正未初始化的 minScore
+        if (passedBinaryFilter && maxScore >= CompareParams.getThreshold()) {
+            if (minScore > 1.0f) minScore = maxScore;
             updateHeap(candidate, maxScore, minScore);
         }
     }
 
     private void updateHeap(CachedFaceFeature candidate, float maxScore, float minScore) {
         // 如果堆未满，直接添加
-        if (localTopNHeap.size() < recogParam.getTopN()) {
+        if (localTopNHeap.size() < CompareParams.getTopN()) {
             localTopNHeap.add(buildResult(candidate, maxScore, minScore));
         }
         // 如果堆满了，且当前分数高于堆顶（堆顶是最小的），则替换
@@ -170,7 +157,7 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
         // 合并其他分片的 TopN 结果
         for (CompareResult otherResult : other.localTopNHeap) {
             // 复用堆更新逻辑
-            if (this.localTopNHeap.size() < recogParam.getTopN()) {
+            if (this.localTopNHeap.size() < CompareParams.getTopN()) {
                 this.localTopNHeap.add(otherResult);
             } else if (this.localTopNHeap.peek() != null && otherResult.getScore() > this.localTopNHeap.peek().getScore()) {
                 this.localTopNHeap.poll();
