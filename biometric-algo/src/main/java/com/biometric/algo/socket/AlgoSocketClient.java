@@ -27,13 +27,6 @@ public class AlgoSocketClient {
     private static final String EOF_MARKER = "<EOF>";
     private final AlgoSocketConfig config;
 
-    /**
-     * 执行算法请求
-     * @param request 请求对象
-     * @param responseType 响应类型的Class
-     * @param <T> 响应泛型
-     * @return 解析后的响应对象
-     */
     public <T extends SocketResponse<?>> T execute(AlgoRequest request, Class<T> responseType) {
         String funId = request.getCommand().getFunId();
         String jsonRequestStr = request.toTransmissionJson().toJSONString();
@@ -42,16 +35,17 @@ public class AlgoSocketClient {
         try (Socket socket = createSocket();
              OutputStream os = socket.getOutputStream();
              InputStream is = socket.getInputStream();
+             // 使用 UTF-8 编码
              BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
              PrintWriter writer = new PrintWriter(new OutputStreamWriter(os, StandardCharsets.UTF_8), true)) {
 
-            // 1. 发送请求 (追加 EOF)
+            // 1. 发送请求
             writer.print(jsonRequestStr + EOF_MARKER);
             writer.flush();
 
             if (log.isDebugEnabled()) {
-                log.debug("算法请求已发送 [FunID={}]: {}...", funId,
-                        jsonRequestStr.length() > 100 ? jsonRequestStr.substring(0, 100) : jsonRequestStr);
+                log.debug("请求已发送 [FunID={}]: {}", funId,
+                        jsonRequestStr.length() > 200 ? jsonRequestStr.substring(0, 200) + "..." : jsonRequestStr);
             }
 
             // 2. 接收响应
@@ -60,21 +54,12 @@ public class AlgoSocketClient {
             // 3. 解析响应
             T result = JSON.parseObject(responseStr, responseType);
 
-            // 4. 基础校验
-            if (result == null) {
-                throw new AlgoProcessException(-1,"算法引擎返回空响应");
-            }
-            if (result.getReturnId() != 0) {
-                log.warn("算法业务返回错误 [FunID={}]: code={}, desc={}", funId, result.getReturnId(), result.getReturnDesc());
-                if(result.getReturnValue()!=null && result.getReturnValue() instanceof String){
-                    result.setReturnValue(null);
-                    result.setReturnDesc(result.getReturnDesc()+" ## "+result.getReturnValue());
-                }
-            }
+            // 4. 校验结果
+            validateResult(result, funId);
 
             return result;
 
-        } catch (AlgoProcessException e) {
+        } catch (SocketConnectionException | AlgoProcessException e) {
             throw e;
         } catch (IOException e) {
             log.error("Socket IO异常 [FunID={}]: {}", funId, e.getMessage());
@@ -85,13 +70,16 @@ public class AlgoSocketClient {
         }
     }
 
+    /**
+     * 创建新的 Socket 连接
+     */
     private Socket createSocket() throws IOException {
         Socket socket = new Socket();
-        // 设置连接超时
+        // 建立连接
         socket.connect(new InetSocketAddress(config.getHost(), config.getPort()), config.getTimeout());
         // 设置读取超时
         socket.setSoTimeout(config.getTimeout());
-        // 禁用 Nagle 算法，对于这种请求-响应式的小包通信，禁用可减少延迟
+        // 禁用 Nagle 算法，减少延迟
         socket.setTcpNoDelay(true);
         return socket;
     }
@@ -109,6 +97,15 @@ public class AlgoSocketClient {
             return response.substring(0, response.length() - EOF_MARKER.length());
         }
         return response;
+    }
+
+    private void validateResult(SocketResponse<?> result, String funId) {
+        if (result == null) {
+            throw new AlgoProcessException(-1, "算法引擎返回空响应 (可能是网络连接中断)");
+        }
+        if (result.getReturnId() != 0) {
+            log.warn("算法业务返回错误 [FunID={}]: code={}, desc={}", funId, result.getReturnId(), result.getReturnDesc());
+        }
     }
 
 }

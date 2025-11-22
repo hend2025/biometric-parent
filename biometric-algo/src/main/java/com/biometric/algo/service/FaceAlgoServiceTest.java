@@ -12,7 +12,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-
 public class FaceAlgoServiceTest {
 
     public static void main(String[] args) {
@@ -37,6 +36,7 @@ public class FaceAlgoServiceTest {
             System.out.println("服务初始化完成...");
 
             // ==================== 2. 准备测试数据 ====================
+            // 请确保文件路径存在，否则会抛出 IOException
             String imageBase64 = ImageToBase64Util.convertImageToBase64("D:\\dt.jpg");
 
             // 基础图片对象 (用于单图接口)
@@ -51,8 +51,9 @@ public class FaceAlgoServiceTest {
             System.out.println("提取结果: " + featureResult.getReturnDesc());
 
             if (featureResult.getReturnId() == 0 && featureResult.getReturnValue() != null) {
+                // 注意：根据实际返回结构获取特征值
                 extractedFeature = featureResult.getReturnValue().getFeature().getFeatureValue().getString("0");
-                System.out.println("✓ 成功提取特征，长度: " + extractedFeature.length());
+                System.out.println("✓ 成功提取特征，长度: " + (extractedFeature != null ? extractedFeature.length() : 0));
             } else {
                 System.err.println("✗ 特征提取失败，部分后续测试可能受影响");
             }
@@ -70,6 +71,7 @@ public class FaceAlgoServiceTest {
             SocketMultiFaceFeature multiFaceResult = service.faceExtractMultiFace(imageBase64, true);
             System.out.println("多人脸提取结果: " + multiFaceResult.getReturnDesc());
             if (multiFaceResult.getReturnId() == 0 && multiFaceResult.getReturnValue() != null) {
+                // 注意：Y01.02 返回的是 JSON 数组字符串，需要解析
                 List<MultiFaceExtractResult> faces = JSON.parseArray(multiFaceResult.getReturnValue(), MultiFaceExtractResult.class);
                 System.out.println("✓ 检测到人脸数: " + (faces != null ? faces.size() : 0));
             }
@@ -112,7 +114,6 @@ public class FaceAlgoServiceTest {
             // ==================== 测试 6: 图片 vs 图片比对 (Y00.02) ====================
             System.out.println("\n【测试 6】Y00.02 图片 vs 图片比对");
 
-            // 【优化】参照特征比对，分别实例化 image1 和 image2
             JSONObject image1 = new JSONObject();
             JSONObject image2 = new JSONObject();
             image1.put("0", imageBase64);
@@ -129,8 +130,9 @@ public class FaceAlgoServiceTest {
             SocketImageProcessResult cropResult = service.faceCrop(images, 200, 200, true, null);
             System.out.println("裁剪结果: " + cropResult.getReturnDesc());
             if (cropResult.getReturnId() == 0) {
+                // Y03.00 返回值也是 JSON 字符串，需要解析
                 ImageProcessReturnValue val = JSON.parseObject(cropResult.getReturnValue(), ImageProcessReturnValue.class);
-                System.out.println("✓ 裁剪后图片数: " + val.getIMAGES().getNum());
+                System.out.println("✓ 裁剪后图片数: " + (val != null && val.getIMAGES() != null ? val.getIMAGES().getNum() : 0));
             }
 
             // ==================== 测试 8: 带质量控制的裁剪 (Y03.01) ====================
@@ -159,8 +161,9 @@ public class FaceAlgoServiceTest {
             SocketFaceDetectionResult detectResult = service.faceDetect(images);
             System.out.println("检测结果: " + detectResult.getReturnDesc());
             if (detectResult.getReturnId() == 0) {
+                // 解析检测结果
                 FaceDetectionValue val = JSON.parseObject(detectResult.getReturnValue(), FaceDetectionValue.class);
-                System.out.println("✓ 检测到图片数: " + (val.getValue() != null ? val.getValue().size() : 0));
+                System.out.println("✓ 检测到图片数: " + (val != null && val.getValue() != null ? val.getValue().size() : 0));
             }
 
             // ==================== 测试 11: 质量评估 (Y03.04) ====================
@@ -171,7 +174,7 @@ public class FaceAlgoServiceTest {
                 System.out.println("✓ 成功");
             }
 
-            System.out.println();
+            System.out.println("\n所有测试执行完毕。");
 
         } catch (Exception e) {
             e.printStackTrace();
