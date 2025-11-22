@@ -1,5 +1,8 @@
 package com.biometric.algo.dto;
 
-public class SocketFaceDetectResult extends SocketResponse<SocketResponse.FaceDetectValue>{
+/**
+ * Socket face detection result
+ */
+public class SocketFaceDetectResult extends SocketResponse<FaceDetectValue> {
 
 }
