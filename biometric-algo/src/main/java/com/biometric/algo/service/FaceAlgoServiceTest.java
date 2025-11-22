@@ -31,7 +31,7 @@ public class FaceAlgoServiceTest {
             strategies.put("FEAT_TO_IMG", new FeatureToImageStrategy(client));
             strategies.put("IMG_TO_IMG", new ImageToImageStrategy(client));
 
-            FaceAlgoService service = new FaceAlgoService(client, config, strategies);
+            FaceAlgoService service = new FaceAlgoService(config,client,strategies);
 
             System.out.println("服务初始化完成...");
 

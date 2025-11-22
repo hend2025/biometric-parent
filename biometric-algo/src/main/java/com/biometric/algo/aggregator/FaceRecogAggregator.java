@@ -28,9 +28,19 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
     private PriorityQueue<CompareResult> localTopNHeap;
     private CompareParams recogParam;
 
+    // 静态内部类实现可序列化的比较器
+    private static class CompareResultComparator implements Comparator<CompareResult>, Serializable {
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public int compare(CompareResult r1, CompareResult r2) {
+            return Double.compare(r1.getScore(), r2.getScore());
+        }
+    }
+
     public FaceRecogAggregator(CompareParams params) {
         this.recogParam = params;
-        this.localTopNHeap = new PriorityQueue<>(params.getTopN(), Comparator.comparingDouble(CompareResult::getScore));
+        this.localTopNHeap = new PriorityQueue<>(params.getTopN(), new CompareResultComparator());
         // 注意：构造函数是在调用端执行的，initInputFeatures 可能需要在 accumulate 首次调用时再次检查
         initInputFeatures();
     }

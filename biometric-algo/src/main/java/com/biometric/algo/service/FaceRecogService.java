@@ -43,7 +43,7 @@ public class FaceRecogService {
             throw new IllegalArgumentException("RecogParam cannot be null");
         }
         if ((params.getFeatures() == null || CollectionUtils.isEmpty(params.getFeatures())) &&
-                CollectionUtils.isEmpty(params.getImages())) {
+            (params.getImages() == null || CollectionUtils.isEmpty(params.getImages())) ) {
             throw new IllegalArgumentException("Features cannot be null");
         }
         if (params.getThreshold() < 0 || params.getThreshold() > 1) {

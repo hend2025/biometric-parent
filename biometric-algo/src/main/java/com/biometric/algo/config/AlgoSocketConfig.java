@@ -11,7 +11,7 @@ public class AlgoSocketConfig {
     /**
      * 算法引擎Socket服务IP
      */
-    private String host = "127.0.0.1";
+    private String host;
 
     /**
      * 算法引擎Socket服务端口

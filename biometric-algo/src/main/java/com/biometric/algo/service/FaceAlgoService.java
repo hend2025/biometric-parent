@@ -22,8 +22,8 @@ import static com.biometric.algo.dto.AlgoCommand.*;
 @RequiredArgsConstructor
 public class FaceAlgoService {
 
-    private final AlgoSocketClient socketClient;
     private final AlgoSocketConfig config;
+    private final AlgoSocketClient socketClient;
     private final Map<String, ComparisonStrategy> strategyMap;
 
     // ==================== 1. 人脸比对 (1:1) ====================
