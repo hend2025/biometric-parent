@@ -1,10 +1,7 @@
 package com.biometric.algo.factory;
 
 import com.alibaba.fastjson.JSON;
-import com.biometric.algo.dto.SocketFaceDetectResult;
-import com.biometric.algo.dto.SocketFaceFeature;
-import com.biometric.algo.dto.SocketRecogResult;
-import com.biometric.algo.dto.SocketResponse;
+import com.biometric.algo.dto.*;
 import com.biometric.algo.exception.AlgoProcessException;
 
 /**
@@ -35,12 +32,39 @@ public class ResponseFactory {
     }
     
     /**
-     * 解析人脸检测结果
+     * 解析人脸质量检测结果（Y03.04）
      * @param jsonResponse JSON响应字符串
      * @return 人脸检测结果对象
      */
     public static SocketFaceDetectResult parseFaceDetect(String jsonResponse) {
         return parseResponse(jsonResponse, SocketFaceDetectResult.class);
+    }
+    
+    /**
+     * 解析多人脸特征提取结果（Y01.02）
+     * @param jsonResponse JSON响应字符串
+     * @return 多人脸特征提取结果对象
+     */
+    public static SocketMultiFaceFeature parseMultiFaceFeature(String jsonResponse) {
+        return parseResponse(jsonResponse, SocketMultiFaceFeature.class);
+    }
+    
+    /**
+     * 解析图片处理结果（Y03.00/Y03.01/Y03.02）
+     * @param jsonResponse JSON响应字符串
+     * @return 图片处理结果对象
+     */
+    public static SocketImageProcessResult parseImageProcess(String jsonResponse) {
+        return parseResponse(jsonResponse, SocketImageProcessResult.class);
+    }
+    
+    /**
+     * 解析人脸检测结果（Y03.03）
+     * @param jsonResponse JSON响应字符串
+     * @return 人脸检测结果对象
+     */
+    public static SocketFaceDetectionResult parseFaceDetection(String jsonResponse) {
+        return parseResponse(jsonResponse, SocketFaceDetectionResult.class);
     }
     
     /**

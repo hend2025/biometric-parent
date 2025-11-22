@@ -3,9 +3,7 @@ package com.biometric.algo.service;
 import com.alibaba.fastjson.JSONObject;
 import com.biometric.algo.builder.AlgoRequestBuilder;
 import com.biometric.algo.config.AlgoSocketConfig;
-import com.biometric.algo.dto.SocketFaceDetectResult;
-import com.biometric.algo.dto.SocketFaceFeature;
-import com.biometric.algo.dto.SocketRecogResult;
+import com.biometric.algo.dto.*;
 import com.biometric.algo.factory.ResponseFactory;
 import com.biometric.algo.socket.SocketClient;
 import com.biometric.algo.strategy.ComparisonStrategy;
@@ -18,17 +16,7 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Refactored Socket Service with Design Patterns:
- * - Builder Pattern: AlgoRequestBuilder for clean request construction
- * - Strategy Pattern: Different comparison strategies
- * - Factory Pattern: ResponseFactory for response parsing
- * - Template Method Pattern: Base strategy classes
- * - Singleton Pattern: Spring @Service for single instance
- * - Improved Resource Management: SocketClient with try-with-resources
- * - Custom Exception Hierarchy: Specific exceptions for different errors
- * - Single Responsibility: Each class has one clear purpose
- */
+
 @Slf4j
 @Service
 public class SocketServiceRefactored {
@@ -115,6 +103,10 @@ public class SocketServiceRefactored {
     /**
      * 3.5 Y01.01 人脸特征提取 (移动终端，带人脸框)
      */
+    public SocketFaceFeature faceExtractMobile(JSONObject images) {
+        return faceExtractMobile(images,null,true);
+    }
+
     public SocketFaceFeature faceExtractMobile(JSONObject images, JSONObject facesRect, boolean needQuality) {
         JSONObject params = AlgoRequestBuilder.newBuilder()
                 .funId("Y01.01")
@@ -132,9 +124,12 @@ public class SocketServiceRefactored {
     
     /**
      * 3.6 Y01.02 人脸特征提取 (多人脸照片)
-     * 注意：此接口输入是单张大图的Base64
+     * 注意：此接口输入是单张大图的Base64，返回包含多个人脸的特征数组
+     * @param imageBase64 单张大图的Base64编码
+     * @param needQuality 是否需要质量评估
+     * @return 多人脸特征提取结果，RETURNVALUE为数组，每项包含face、feat、quality
      */
-    public String faceExtractMultiFace(String imageBase64, boolean needQuality) {
+    public SocketMultiFaceFeature faceExtractMultiFace(String imageBase64, boolean needQuality) {
         JSONObject params = AlgoRequestBuilder.newBuilder()
                 .funId("Y01.02")
                 .pImage(imageBase64)
@@ -143,15 +138,21 @@ public class SocketServiceRefactored {
                 .version(config.getDefaultFaceVersion())
                 .build();
         
-        return socketClient.sendRequest(params);
+        String jsonResponse = socketClient.sendRequest(params);
+        return ResponseFactory.parseMultiFaceFeature(jsonResponse);
     }
     
     // ==================== Face Processing ====================
     
     /**
      * 6.1 Y03.00 人脸裁剪 (标准裁剪)
+     * @param imagesMap 图片数据组
+     * @param width 裁剪后图片宽度
+     * @param height 裁剪后图片高度
+     * @param stdImg 是否输出标准图像
+     * @return 图片处理结果，RETURNVALUE包含裁剪后的图片，DETAIL包含每张图的处理状态
      */
-    public String faceCrop(JSONObject imagesMap, int width, int height, boolean stdImg) {
+    public SocketImageProcessResult faceCrop(JSONObject imagesMap, int width, int height, boolean stdImg) {
         JSONObject params = AlgoRequestBuilder.newBuilder()
                 .funId("Y03.00")
                 .images(imagesMap)
@@ -163,13 +164,19 @@ public class SocketServiceRefactored {
                 .stdImg(stdImg)
                 .build();
         
-        return socketClient.sendRequest(params);
+        String jsonResponse = socketClient.sendRequest(params);
+        return ResponseFactory.parseImageProcess(jsonResponse);
     }
     
     /**
      * 6.2 Y03.01 人脸裁剪 (带质量评估及阈值控制)
+     * @param imagesMap 图片数据组
+     * @param width 裁剪后图片宽度
+     * @param height 裁剪后图片高度
+     * @param thresholds 质量评估阈值配置（可选参数：MULTI、MAXDETECTSIZE、MINDETECTSIZE等）
+     * @return 图片处理结果，RETURNVALUE包含裁剪后的图片，DETAIL包含每张图的处理状态
      */
-    public String faceCropWithQuality(JSONObject imagesMap, int width, int height, JSONObject thresholds) {
+    public SocketImageProcessResult faceCropWithQuality(JSONObject imagesMap, int width, int height, JSONObject thresholds) {
         JSONObject params = AlgoRequestBuilder.newBuilder()
                 .funId("Y03.01")
                 .images(imagesMap)
@@ -181,13 +188,16 @@ public class SocketServiceRefactored {
                 .thresholds(thresholds)
                 .build();
         
-        return socketClient.sendRequest(params);
+        String jsonResponse = socketClient.sendRequest(params);
+        return ResponseFactory.parseImageProcess(jsonResponse);
     }
     
     /**
      * 6.2 Y03.02 去网格
+     * @param imagesMap 图片数据组
+     * @return 图片处理结果，RETURNVALUE包含去网格后的图片，DETAIL包含每张图的处理状态
      */
-    public String imageRemoveGrid(JSONObject imagesMap) {
+    public SocketImageProcessResult imageRemoveGrid(JSONObject imagesMap) {
         JSONObject params = AlgoRequestBuilder.newBuilder()
                 .funId("Y03.02")
                 .images(imagesMap)
@@ -196,13 +206,16 @@ public class SocketServiceRefactored {
                 .version("QUALITY")
                 .build();
         
-        return socketClient.sendRequest(params);
+        String jsonResponse = socketClient.sendRequest(params);
+        return ResponseFactory.parseImageProcess(jsonResponse);
     }
     
     /**
      * 6.3 Y03.03 人脸检测 (获取坐标和关键点)
+     * @param imagesMap 图片数据组
+     * @return 人脸检测结果，RETURNVALUE.VALUE包含每张图的人脸位置和关键点，DETAIL包含处理状态
      */
-    public String faceDetect(JSONObject imagesMap) {
+    public SocketFaceDetectionResult faceDetect(JSONObject imagesMap) {
         JSONObject params = AlgoRequestBuilder.newBuilder()
                 .funId("Y03.03")
                 .images(imagesMap)
@@ -211,7 +224,8 @@ public class SocketServiceRefactored {
                 .version("QUALITY")
                 .build();
         
-        return socketClient.sendRequest(params);
+        String jsonResponse = socketClient.sendRequest(params);
+        return ResponseFactory.parseFaceDetection(jsonResponse);
     }
     
     /**
@@ -230,4 +244,5 @@ public class SocketServiceRefactored {
         String jsonResponse = socketClient.sendRequest(params);
         return ResponseFactory.parseFaceDetect(jsonResponse);
     }
+
 }

@@ -112,6 +112,55 @@ public class AlgoRequestBuilder {
         return this;
     }
     
+    /**
+     * 是否裁剪多个人脸（Y03.01）
+     * @param multi 1-裁剪多人脸，0-裁剪最大人脸
+     */
+    public AlgoRequestBuilder multi(int multi) {
+        params.put("MULTI", multi);
+        return this;
+    }
+    
+    /**
+     * 人脸检测框最大值（Y03.01）
+     */
+    public AlgoRequestBuilder maxDetectSize(int maxDetectSize) {
+        params.put("MAXDETECTSIZE", maxDetectSize);
+        return this;
+    }
+    
+    /**
+     * 人脸检测框最小值（Y03.01）
+     */
+    public AlgoRequestBuilder minDetectSize(int minDetectSize) {
+        params.put("MINDETECTSIZE", minDetectSize);
+        return this;
+    }
+    
+    /**
+     * 人脸检测阈值（Y03.01）
+     */
+    public AlgoRequestBuilder detectThreshold(int detectThreshold) {
+        params.put("DETECTTHRESHOLD", detectThreshold);
+        return this;
+    }
+    
+    /**
+     * 质量评估姿态阈值（Y03.01）
+     */
+    public AlgoRequestBuilder poseThreshold(double poseThreshold) {
+        params.put("POSETHRESHOLD", poseThreshold);
+        return this;
+    }
+    
+    /**
+     * 质量评估模糊度阈值（Y03.01）
+     */
+    public AlgoRequestBuilder blurredThreshold(double blurredThreshold) {
+        params.put("BLURREDTHRESHOLD", blurredThreshold);
+        return this;
+    }
+    
     public AlgoRequestBuilder customParam(String key, Object value) {
         params.put(key, value);
         return this;
