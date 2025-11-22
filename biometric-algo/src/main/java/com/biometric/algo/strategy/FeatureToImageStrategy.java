@@ -1,31 +1,38 @@
 package com.biometric.algo.strategy;
 
 import com.alibaba.fastjson.JSONObject;
-import com.biometric.algo.builder.AlgoRequestBuilder;
-import com.biometric.algo.socket.ClaudeSocketClient;
+import com.biometric.algo.dto.AlgoCommand;
+import com.biometric.algo.dto.AlgoRequest;
+import com.biometric.algo.dto.SocketRecogResult;
+import com.biometric.algo.socket.AlgoSocketClient;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /**
- * Feature to Image comparison strategy (Y00.01)
+ * 特征对图片比对策略 (Y00.01)
+ * 用于将提取好的人脸特征与一组图片进行比对
  */
-public class FeatureToImageStrategy extends FaceCompareStrategy {
-    
-    public FeatureToImageStrategy(ClaudeSocketClient socketClient) {
-        super(socketClient);
-    }
-    
+@Component("FEAT_TO_IMG")
+@RequiredArgsConstructor
+public class FeatureToImageStrategy extends ComparisonStrategy {
+
+    private final AlgoSocketClient socketClient;
+
     @Override
-    protected JSONObject buildParams(JSONObject feature, JSONObject image, String version) {
-        return AlgoRequestBuilder.newBuilder()
-                .funId(getFunctionId())
-                .algType(ALG_TYPE_FACE_VISIBLE)
+    public SocketRecogResult compare(JSONObject data1, JSONObject data2, String version) {
+        // 构建基础请求
+        AlgoRequest request = AlgoRequest.builder()
+                .command(AlgoCommand.COMPARE_FEAT_TO_IMG) // 对应 Y00.01
                 .version(version)
-                .pFeature1(AlgoRequestBuilder.buildFeatureGroup(feature))
-                .pImage2(AlgoRequestBuilder.buildImageGroup(image))
                 .build();
-    }
-    
-    @Override
-    public String getFunctionId() {
-        return "Y00.01";
+
+        // 填充比对参数
+        // PFEATURE1: 特征数据
+        request.addParam("PFEATURE1", buildFeatureGroup(data1));
+        // PIMAGE2: 图片数据
+        request.addParam("PIMAGE2", buildImageGroup(data2));
+
+        // 执行请求
+        return socketClient.execute(request, SocketRecogResult.class);
     }
 }

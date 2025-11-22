@@ -3,29 +3,27 @@ package com.biometric.algo.strategy;
 import com.alibaba.fastjson.JSONObject;
 import com.biometric.algo.dto.SocketRecogResult;
 
-/**
- * 比对策略接口
- * 采用策略模式定义不同类型的人脸比对策略（特征vs特征、特征vs图片、图片vs图片）
- * 
- * @author biometric-algo
- * @version 1.0
- */
-public interface ComparisonStrategy {
-    
-    /**
-     * 执行比对操作
-     * 
-     * @param data1 第一组数据对象（特征或图片）
-     * @param data2 第二组数据对象（特征或图片）
-     * @param version 算法版本号
-     * @return 比对结果
-     */
-    SocketRecogResult compare(JSONObject data1, JSONObject data2, String version);
-    
-    /**
-     * 获取策略对应的功能ID
-     * 
-     * @return 功能ID（如Y00.00、Y00.01、Y00.02）
-     */
-    String getFunctionId();
+public abstract class ComparisonStrategy {
+    /** 算法类型 - 可见光人脸 */
+    private static final int ALG_TYPE_FACE_VISIBLE = 1;
+
+    public abstract SocketRecogResult compare(JSONObject data1, JSONObject data2, String version);
+
+    public static JSONObject buildGroup(JSONObject dataMap, int algType, String keyName) {
+        JSONObject group = new JSONObject();
+        group.put(keyName, dataMap);
+        group.put("algtype", algType);
+        group.put("num", dataMap != null ? dataMap.size() : 0);
+        return group;
+    }
+
+    public static JSONObject buildFeatureGroup(JSONObject featureMap) {
+        return buildGroup(featureMap, ALG_TYPE_FACE_VISIBLE, "feature");
+    }
+
+    public static JSONObject buildImageGroup(JSONObject imageMap) {
+        return buildGroup(imageMap, ALG_TYPE_FACE_VISIBLE, "images");
+    }
+
+
 }

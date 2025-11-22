@@ -6,16 +6,10 @@ import lombok.Data;
 
 import java.util.Map;
 
-/**
- * 算法请求封装类
- * 用于构建算法接口请求参数，支持Builder模式
- * 
- * @author biometric-algo
- * @version 1.0
- */
 @Data
 @Builder
 public class AlgoRequest {
+
     /** 算法命令 */
     private AlgoCommand command;
     

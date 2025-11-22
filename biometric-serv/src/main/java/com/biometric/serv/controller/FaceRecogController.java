@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.biometric.algo.dto.CompareParams;
 import com.biometric.algo.dto.CompareResult;
 import com.biometric.algo.service.FaceRecogService;
-import com.biometric.algo.service.SocketServiceGemini;
 import com.biometric.serv.entity.FaceFtur;
 import com.biometric.serv.mapper.FaceFturMapper;
 import org.slf4j.Logger;

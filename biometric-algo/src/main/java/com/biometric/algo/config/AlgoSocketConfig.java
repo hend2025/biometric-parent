@@ -4,15 +4,6 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * 算法Socket配置类
- * 配置算法引擎的Socket连接参数和默认版本号
- * 
- * 配置项前缀：biometric.algo.socket
- * 
- * @author biometric-algo
- * @version 1.0
- */
 @Data
 @Configuration
 @ConfigurationProperties(prefix = "biometric.algo.socket")
