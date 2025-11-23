@@ -86,9 +86,6 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
         if (candidateBinaryFeat == null) return;
 
         float maxScore = -1.0f;
-        float minScore = 2.0f;
-        String maxFaceId = null;
-        String minFaceId = null;
         float[] candidateFloatFeat = null;
         boolean passedBinaryFilter = false;
 
@@ -115,13 +112,8 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
 
                 // 记录最大相似度
                 if (similarity > maxScore) {
-                    maxFaceId = Integer.toString(i);
                     maxScore = similarity;
                     passedBinaryFilter = true;
-                }
-                if (similarity < minScore) {
-                    minFaceId = Integer.toString(i);
-                    minScore = similarity;
                 }
             }
 
@@ -188,7 +180,6 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
         for (List<CompareResult> list : groupedMap.values()) {
             if (list.isEmpty()) continue;
 
-            // Sort group by score descending to find max/min
             list.sort((o1, o2) -> Float.compare(o2.getScore(), o1.getScore()));
 
             CompareResult maxResult = list.get(0);
