@@ -62,8 +62,8 @@ public class HazelcastConfiguration {
         groupIndex.setName("idx_group_ids");
         mapConfig.addIndexConfig(groupIndex);
 
-        IndexConfig personIndex = new IndexConfig(IndexType.HASH, "psnTmplNo");
-        personIndex.setName("idx_psn_tmpl_no");
+        IndexConfig personIndex = new IndexConfig(IndexType.HASH, "personId");
+        personIndex.setName("idx_person_id");
         mapConfig.addIndexConfig(personIndex);
 
         config.addMapConfig(mapConfig);

@@ -1,9 +1,9 @@
 package com.biometric.algo.service;
 
 import com.biometric.algo.aggregator.FaceRecogAggregator;
-import com.biometric.algo.dto.CachedFaceFeature;
 import com.biometric.algo.dto.CompareParams;
 import com.biometric.algo.dto.CompareResult;
+import com.biometric.algo.dto.PersonFaceData;
 import com.hazelcast.map.IMap;
 import com.hazelcast.query.Predicate;
 import com.hazelcast.query.Predicates;
@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 人脸识别服务
@@ -31,7 +32,7 @@ import java.util.*;
 @Service
 public class FaceRecogService {
     private static final Logger log = LoggerFactory.getLogger(FaceRecogService.class);
-    private final IMap<String, CachedFaceFeature> faceFeatureMap;
+    private final IMap<String, PersonFaceData> faceFeatureMap;
 
     @Autowired
     public FaceRecogService(FaceCacheService faceCacheService) {
@@ -59,7 +60,8 @@ public class FaceRecogService {
         if(params.getGroups() == null || CollectionUtils.isEmpty(params.getGroups())){
             result = faceFeatureMap.aggregate(aggregator);
         }else{
-            Predicate<String, CachedFaceFeature> groupPredicate = Predicates.in("groupIds[any]", params.getGroups().toArray(new String[0]));
+            // Use String group IDs directly
+            Predicate<String, PersonFaceData> groupPredicate = Predicates.in("groupIds[any]", params.getGroups().toArray(new String[0]));
             result = faceFeatureMap.aggregate(aggregator, groupPredicate);
         }
 

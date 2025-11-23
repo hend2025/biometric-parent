@@ -3,6 +3,7 @@ package com.biometric.algo.aggregator;
 import com.biometric.algo.dto.CachedFaceFeature;
 import com.biometric.algo.dto.CompareParams;
 import com.biometric.algo.dto.CompareResult;
+import com.biometric.algo.dto.PersonFaceData;
 import com.biometric.algo.util.Face303JavaCalcuater;
 import com.hazelcast.aggregation.Aggregator;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +16,7 @@ import java.util.*;
  * Hazelcast 分布式聚合器 - 用于内存网格中的人脸 1:N 搜索
  */
 @Slf4j
-public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedFaceFeature>, List<CompareResult>>, Serializable {
+public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonFaceData>, List<CompareResult>>, Serializable {
 
     private static final long serialVersionUID = 1L;
     private static final int HAMMING_DIST_THRESHOLD = 50;
@@ -67,7 +68,7 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
     }
 
     @Override
-    public void accumulate(Map.Entry<String, CachedFaceFeature> entry) {
+    public void accumulate(Map.Entry<String, PersonFaceData> entry) {
         if (entry == null || entry.getValue() == null) return;
 
         // 确保输入特征在当前节点已初始化
@@ -76,8 +77,17 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
         }
         if (inputBinaryFeatures.isEmpty()) return;
 
-        CachedFaceFeature candidate = entry.getValue();
+        PersonFaceData personData = entry.getValue();
+        List<CachedFaceFeature> features = personData.getFeatures();
+        
+        if (features == null || features.isEmpty()) return;
 
+        for (CachedFaceFeature candidate : features) {
+            processCandidate(candidate, personData.getPersonId());
+        }
+    }
+
+    private void processCandidate(CachedFaceFeature candidate, String psnTmplNo) {
         // 1. 获取候选人二进制特征（优先使用缓存的）
         int[] candidateBinaryFeat = candidate.getBinaryFeature();
         if (candidateBinaryFeat == null) {
@@ -129,7 +139,7 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
         // 3. 阈值判断与堆更新
         if (passedBinaryFilter && maxScore >= CompareParams.getThreshold()) {
             CompareResult result = new CompareResult();
-            result.setPsnTmplNo(candidate.getPsnTmplNo());
+            result.setPsnTmplNo(psnTmplNo);
             result.setFaceId(candidate.getFaceId());
             result.setMatched(true);
             result.setScore(maxScore);
@@ -143,8 +153,6 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, CachedF
                 localTopNHeap.poll();
                 localTopNHeap.add(result);
             }
-        }else {
-            details.clear();
         }
     }
 

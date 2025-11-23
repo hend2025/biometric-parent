@@ -1,7 +1,7 @@
 package com.biometric.algo.service;
 
 import com.biometric.algo.config.HazelcastConfiguration;
-import com.biometric.algo.dto.CachedFaceFeature;
+import com.biometric.algo.dto.PersonFaceData;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
 import org.slf4j.Logger;
@@ -13,36 +13,24 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
- * 人脸特征缓存服务
- * 使用Hazelcast分布式缓存管理加载的人脸特征数据
- * 
- * 主要功能：
- * - 批量加载特征到缓存
- * - 清空缓存
- * - 获取缓存Map实例
- * 
- * @author biometric-algo
- * @version 1.0
- */
 @Service
 public class FaceCacheService {
     private static final Logger log = LoggerFactory.getLogger(FaceCacheService.class);
-    private final IMap<String, CachedFaceFeature> faceFeatureMap;
+    private final IMap<String, PersonFaceData> faceFeatureMap;
 
     @Autowired
     public FaceCacheService(HazelcastInstance hazelcastInstance) {
         this.faceFeatureMap = hazelcastInstance.getMap(HazelcastConfiguration.FACE_FEATURE_MAP);
     }
 
-    public void loadFeatures(List<CachedFaceFeature> features) {
+    public void loadFeatures(List<PersonFaceData> features) {
         if (features == null || features.isEmpty()) {
             return;
         }
-        Map<String, CachedFaceFeature> batchMap = features.stream()
-                .collect(Collectors.toMap(CachedFaceFeature::getFaceId, Function.identity()));
+        Map<String, PersonFaceData> batchMap = features.stream()
+                .collect(Collectors.toMap(PersonFaceData::getPersonId, Function.identity()));
         faceFeatureMap.putAll(batchMap);
-        log.info("已加载 {} 条人脸特征到Hazelcast缓存", batchMap.size());
+        log.info("已加载 {} 条人员特征数据到Hazelcast缓存", batchMap.size());
     }
 
     public void clearCache() {
@@ -50,7 +38,7 @@ public class FaceCacheService {
         faceFeatureMap.clear();
     }
 
-    public IMap<String, CachedFaceFeature> getFaceFeatureMap() {
+    public IMap<String, PersonFaceData> getFaceFeatureMap() {
         return faceFeatureMap;
     }
 }

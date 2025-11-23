@@ -1,179 +1,132 @@
 package com.biometric.serv.service;
 
 import com.biometric.algo.dto.CachedFaceFeature;
+import com.biometric.algo.dto.PersonFaceData;
 import com.biometric.algo.service.FaceCacheService;
-import com.biometric.serv.entity.GrpPsn;
 import com.biometric.serv.entity.FaceFtur;
-import com.biometric.serv.mapper.GrpPsnMapper;
+import com.biometric.serv.entity.GrpPsn;
+import com.biometric.serv.entity.PsnTmpl;
 import com.biometric.serv.mapper.FaceFturMapper;
+import com.biometric.serv.mapper.GrpPsnMapper;
+import com.biometric.serv.mapper.PsnTmplMapper;
 import org.apache.ibatis.session.ResultHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class DataLoadService {
 
     private static final Logger log = LoggerFactory.getLogger(DataLoadService.class);
-    private static final int BATCH_SIZE = 1000;
+    private static final int BATCH_SIZE = 2000;
     private static final int LOG_INTERVAL = 10000;
-    private static final int GROUP_MAP_CHUNK_SIZE = 10000;
 
     @Autowired
-    private GrpPsnMapper GrpPsnMapper;
+    private GrpPsnMapper grpPsnMapper;
     @Autowired
     private FaceFturMapper faceFturMapper;
+    @Autowired
+    private PsnTmplMapper psnTmplMapper;
     @Autowired
     private FaceCacheService faceCacheService;
 
     @Transactional(readOnly = true)
-    public void loadAllFeaturesIntoCache() {
-        log.info("Starting biometric data load into Hazelcast cache...");
+    public void loadAllFeaturesIntoCache(int shardIndex, int totalShards) {
+        log.info("Starting biometric data load into Hazelcast cache for shard {}/{}...", shardIndex, totalShards);
         long startTime = System.currentTimeMillis();
 
+        AtomicLong totalPersonsLoaded = new AtomicLong(0);
+        List<String> psnIdBatch = new ArrayList<>(BATCH_SIZE);
+
+        ResultHandler<PsnTmpl> handler = resultContext -> {
+            PsnTmpl psn = resultContext.getResultObject();
+            if (psn == null || psn.getPsnTmplNo() == null) return;
+
+            psnIdBatch.add(psn.getPsnTmplNo());
+
+            if (psnIdBatch.size() >= BATCH_SIZE) {
+                processBatch(psnIdBatch, shardIndex, totalPersonsLoaded);
+                psnIdBatch.clear();
+            }
+        };
+
         try {
-            faceCacheService.clearCache();
+            psnTmplMapper.streamScanPsnTmpls(shardIndex, totalShards, handler);
 
-            log.info("Step 1: Pre-loading Person-to-Group mappings into Hazelcast (chunked streaming)...");
-            Map<String, Set<String>> psnToGroupMap = loadPsnToGroupMapDirectly();
-
-            log.info("Step 1: Loaded {} unique person-group mappings into temporary cache.", psnToGroupMap.size());
-
-            log.info("Step 2: Stream loading face features from DB with direct cache insertion...");
-            loadFeaturesWithGroupMapping(psnToGroupMap);
-
-            log.info("Step 3: Cleaning up temporary group mapping cache...");
-            psnToGroupMap.clear();
+            if (!psnIdBatch.isEmpty()) {
+                processBatch(psnIdBatch, shardIndex, totalPersonsLoaded);
+                psnIdBatch.clear();
+            }
 
             long duration = (System.currentTimeMillis() - startTime) / 1000;
-            log.info("Data load finished successfully in {} seconds.", duration);
+            log.info("Data load for shard {} finished successfully in {} seconds. Total persons: {}", 
+                    shardIndex, duration, totalPersonsLoaded.get());
 
         } catch (Exception e) {
-            log.error("Failed to load features into cache", e);
+            log.error("Failed to load features into cache for shard " + shardIndex, e);
             throw new RuntimeException("Feature loading failed", e);
         }
     }
 
-    private void loadFeaturesWithGroupMapping(Map<String, Set<String>> psnToGroupMap) {
-        AtomicLong totalFeaturesLoaded = new AtomicLong(0);
-        Map<String, CachedFaceFeature> batchMap = new HashMap<>(BATCH_SIZE);
+    private void processBatch(List<String> psnIds, int shardIndex, AtomicLong totalCounter) {
+        if (psnIds.isEmpty()) return;
 
-        ResultHandler<FaceFtur> handler = resultContext -> {
-            FaceFtur feature = resultContext.getResultObject();
+        // 1. Batch fetch groups
+        List<GrpPsn> groups = grpPsnMapper.selectByPsnIds(psnIds);
+        Map<String, Set<String>> psnToGroups = new HashMap<>();
+        for (GrpPsn g : groups) {
+            if (g.getGrpId() != null) {
+                psnToGroups.computeIfAbsent(g.getPsnTmplNo(), k -> new HashSet<>()).add(g.getGrpId());
+            }
+        }
 
-            if (feature == null || feature.getFaceBosgId() == null ||
-                    feature.getFaceFturData() == null || feature.getFaceFturData().length != 512) {
-                log.warn("Skipping invalid feature record: {}",
-                        feature != null ? feature.getFaceBosgId() : "null");
-                return;
+        // 2. Batch fetch features
+        List<FaceFtur> features = faceFturMapper.selectByPsnIds(psnIds);
+        Map<String, List<CachedFaceFeature>> psnToFeatures = new HashMap<>();
+        for (FaceFtur f : features) {
+            if (f.getFaceBosgId() != null && f.getFaceFturData() != null) {
+                CachedFaceFeature cachedFeature = new CachedFaceFeature();
+                cachedFeature.setFaceId(f.getFaceBosgId());
+                cachedFeature.setFeatureData(f.getFaceFturData());
+                cachedFeature.setTemplateType(f.getFaceCrteTmplType());
+                cachedFeature.setAlgoType(f.getAlgoVerId());
+                
+                psnToFeatures.computeIfAbsent(f.getPsnTmplNo(), k -> new ArrayList<>()).add(cachedFeature);
+            }
+        }
+
+        // 3. Build PersonFaceData objects
+        List<PersonFaceData> personDataList = new ArrayList<>(psnIds.size());
+        for (String psnId : psnIds) {
+            List<CachedFaceFeature> featList = psnToFeatures.get(psnId);
+            if (featList==null || featList.size()==0){
+                continue;
+            }
+            Set<String> grpSet = psnToGroups.get(psnId);
+            if (grpSet == null || grpSet.size()==0) {
+                continue;
             }
 
-            Set<String> groupIds = psnToGroupMap.getOrDefault(feature.getPsnTmplNo(), Collections.emptySet());
+            PersonFaceData data = new PersonFaceData();
+            data.setPersonId(psnId);
+            data.setFeatures(featList);
+            data.setGroupIds(grpSet.toArray(new String[0]));
+            
+            personDataList.add(data);
+        }
 
-            CachedFaceFeature cachedFeature = new CachedFaceFeature();
-            cachedFeature.setPsnTmplNo(feature.getPsnTmplNo());
-            cachedFeature.setFaceId(feature.getFaceBosgId());
-            cachedFeature.setFeatureData(feature.getFaceFturData());
-            cachedFeature.setTemplateType(feature.getFaceCrteTmplType());
-            cachedFeature.setAlgoType(feature.getAlgoVerId());
-            cachedFeature.setGroupIds(groupIds.toArray(new String[0]));
-
-            synchronized (batchMap) {
-                batchMap.put(cachedFeature.getFaceId(), cachedFeature);
-
-                if (batchMap.size() >= BATCH_SIZE) {
-                    faceCacheService.getFaceFeatureMap().putAll(batchMap);
-                    long total = totalFeaturesLoaded.addAndGet(batchMap.size());
-
-                    if (total % LOG_INTERVAL == 0) {
-                        log.info("Progress: {} features loaded...", total);
-                    }
-                    batchMap.clear();
-                }
+        // 4. Load to cache
+        if (!personDataList.isEmpty()) {
+            faceCacheService.loadFeatures(personDataList);
+            long total = totalCounter.addAndGet(personDataList.size());
+            if (total % LOG_INTERVAL < BATCH_SIZE) { // Rough logging
+                log.info("Shard {}: Progress: {} persons loaded...", shardIndex, total);
             }
-        };
-
-        try {
-            faceFturMapper.streamScanAllFeatures(handler);
-
-            synchronized (batchMap) {
-                if (!batchMap.isEmpty()) {
-                    faceCacheService.getFaceFeatureMap().putAll(batchMap);
-                    totalFeaturesLoaded.addAndGet(batchMap.size());
-                    log.info("Loaded last batch of {} features... (Total: {})",
-                            batchMap.size(), totalFeaturesLoaded.get());
-                    batchMap.clear();
-                }
-            }
-
-            log.info("Total {} features loaded successfully.", totalFeaturesLoaded.get());
-
-        } catch (Exception e) {
-            log.error("Error during feature streaming", e);
-            throw new RuntimeException("Failed to stream features from database", e);
         }
     }
-
-    private Map<String, Set<String>> loadPsnToGroupMapDirectly() {
-        Map<String, Set<String>> psnToGroupMap = new ConcurrentHashMap<>();
-
-        AtomicLong relationCount = new AtomicLong(0);
-        Map<String, Set<String>> chunkBuffer = new ConcurrentHashMap<>(GROUP_MAP_CHUNK_SIZE);
-
-        ResultHandler<GrpPsn> handler = resultContext -> {
-            GrpPsn relation = resultContext.getResultObject();
-
-            if (relation == null || relation.getPsnTmplNo() == null || relation.getGrpId() == null) {
-                log.warn("Skipping invalid group-person relation");
-                return;
-            }
-
-            chunkBuffer.computeIfAbsent(relation.getPsnTmplNo(), k -> ConcurrentHashMap.newKeySet())
-                    .add(relation.getGrpId());
-
-            long count = relationCount.incrementAndGet();
-
-            if (chunkBuffer.size() >= GROUP_MAP_CHUNK_SIZE) {
-                synchronized (psnToGroupMap) {
-                    for (Map.Entry<String, Set<String>> entry : chunkBuffer.entrySet()) {
-                        String personId = entry.getKey();
-                        Set<String> groups = entry.getValue();
-                        psnToGroupMap.computeIfAbsent(personId, k -> ConcurrentHashMap.newKeySet()).addAll(groups);
-                    }
-                }
-                log.info("... flushed {} persons to cache (total relations: {})", chunkBuffer.size(), count);
-                chunkBuffer.clear();
-            }
-        };
-
-        try {
-            GrpPsnMapper.streamScanAllRelations(handler);
-
-            if (!chunkBuffer.isEmpty()) {
-                synchronized (psnToGroupMap) {
-                    for (Map.Entry<String, Set<String>> entry : chunkBuffer.entrySet()) {
-                        String personId = entry.getKey();
-                        Set<String> groups = entry.getValue();
-                        psnToGroupMap.computeIfAbsent(personId, k -> ConcurrentHashMap.newKeySet()).addAll(groups);
-                    }
-                }
-                log.info("... flushed final {} persons to cache", chunkBuffer.size());
-                chunkBuffer.clear();
-            }
-
-            log.info("Finished loading Person-to-Group mappings. Total relations: {}, Unique persons: {}",
-                    relationCount.get(), psnToGroupMap.size());
-            return psnToGroupMap;
-
-        } catch (Exception e) {
-            log.error("Error loading person-group mappings", e);
-            throw new RuntimeException("Failed to load person-group mappings", e);
-        }
-    }
-
 }

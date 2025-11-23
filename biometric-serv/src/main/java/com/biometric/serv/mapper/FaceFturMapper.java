@@ -2,8 +2,13 @@ package com.biometric.serv.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.biometric.serv.entity.FaceFtur;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.session.ResultHandler;
 
+import java.util.List;
+
 public interface FaceFturMapper extends BaseMapper<FaceFtur> {
-    void streamScanAllFeatures(ResultHandler<FaceFtur> resultHandler);
+    void streamScanAllFeatures(@Param("shardIndex") int shardIndex, @Param("totalShards") int totalShards, ResultHandler<FaceFtur> resultHandler);
+    
+    List<FaceFtur> selectByPsnIds(@Param("psnIds") List<String> psnIds);
 }
