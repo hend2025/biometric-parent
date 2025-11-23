@@ -73,6 +73,7 @@ public class FaceRecogController {
         String extractedFeature = featureResult.getReturnValue().getFeature().getFeatureValue().getString("0");
         byte[] bytes = Base64.getDecoder().decode(extractedFeature);
         features.add(bytes);
+        features.add(bytes);
 
         List<String> setGroupIds = new ArrayList<>();
         if (groupIds != null && !groupIds.trim().isEmpty()) {

@@ -3,6 +3,7 @@ package com.biometric.algo.dto;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 public class CompareResult implements Serializable {
@@ -23,7 +24,7 @@ public class CompareResult implements Serializable {
 
     private float minScore;
 
-    private compareDetails details;
+    private List<compareDetails> details;
 
     @Data
     public static class compareDetails implements Serializable {
@@ -33,6 +34,8 @@ public class CompareResult implements Serializable {
         private String faceId2;
 
         private float score;
+
+        private boolean matched;
 
     }
 
