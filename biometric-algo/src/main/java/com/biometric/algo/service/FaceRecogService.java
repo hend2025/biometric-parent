@@ -17,18 +17,6 @@ import org.springframework.util.CollectionUtils;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * 人脸识别服务
- * 提供人脸1:N搜索功能，基于Hazelcast聚合器实现
- * 
- * 主要功能：
- * - 1:N特征比对
- * - 组别过滤
- * - 结果排序与筛选
- * 
- * @author biometric-algo
- * @version 1.0
- */
 @Service
 public class FaceRecogService {
     private static final Logger log = LoggerFactory.getLogger(FaceRecogService.class);

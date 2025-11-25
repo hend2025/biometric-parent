@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.util.*;
 
 @RestController
-@RequestMapping("/api/v1/faceRecog")
+@RequestMapping("/api/faceRecog")
 public class FaceRecogController {
 
     private static final Logger log = LoggerFactory.getLogger(FaceRecogController.class);

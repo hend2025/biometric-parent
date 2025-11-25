@@ -12,9 +12,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * 数据加载控制器，提供手动触发数据加载的接口
- */
 @RestController
 @RequestMapping("/api/data-load")
 public class DataLoadController {
