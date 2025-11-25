@@ -23,6 +23,7 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
 
     private transient List<float[]> inputFloatFeatures;
     private transient List<int[]> inputBinaryFeatures;
+    private transient String[] inputFaceIdStrings;
 
     private CompareParams compareParams;
     private PriorityQueue<CompareResult> localTopNHeap;
@@ -41,8 +42,15 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
         inputBinaryFeatures = new ArrayList<>();
 
         if (compareParams != null && !CollectionUtils.isEmpty(compareParams.getFeatures())) {
+            int size = compareParams.getFeatures().size();
+            inputFaceIdStrings = new String[size];
+            int idx = 0;
             for (byte[] feature : compareParams.getFeatures()) {
-                if (feature == null || feature.length == 0) continue;
+                if (feature == null || feature.length == 0) {
+                    inputFaceIdStrings[idx] = Integer.toString(idx);
+                    idx++;
+                    continue;
+                }
 
                 int[] binaryFeat = Face303JavaCalcuater.getBinaFeat(feature);
                 float[] floatFeat = Face303JavaCalcuater.toFloatArray(feature);
@@ -50,7 +58,9 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
                 if (binaryFeat != null && floatFeat != null) {
                     inputBinaryFeatures.add(binaryFeat);
                     inputFloatFeatures.add(floatFeat);
+                    inputFaceIdStrings[idx] = Integer.toString(idx);
                 }
+                idx++;
             }
         }
     }
@@ -83,7 +93,17 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
         float maxScore = -1.0f;
         String maxFaceId = null;
         boolean passedBinaryFilter = false;
-        List<CompareResult.compareDetails> details = new ArrayList<>();
+
+        // 使用数组缓存比对详情，避免频繁创建对象
+        int inputSize = inputBinaryFeatures.size();
+        int featSize = features.size();
+        int maxDetails = inputSize * featSize;
+        
+        float[] detailScores = new float[maxDetails];
+        int[] detailInputIdx = new int[maxDetails];
+        String[] detailCandidateFaceIds = new String[maxDetails];
+        int detailCount = 0;
+
         for (CachedFaceFeature candidate : features) {
             // 1. 获取候选人二进制特征（优先使用缓存的）
             int[] candidateBinaryFeat = candidate.getBinaryFeature();
@@ -95,7 +115,7 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
             float[] candidateFloatFeat = null;
 
             // 2. 遍历所有输入特征进行比对
-            for (int i = 0; i < inputBinaryFeatures.size(); i++) {
+            for (int i = 0; i < inputSize; i++) {
                 int[] inputBFeat = inputBinaryFeatures.get(i);
 
                 // 2.1 粗筛：汉明距离检查
@@ -122,24 +142,34 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
                     }
                 }
 
-                CompareResult.compareDetails detail = new CompareResult.compareDetails();
-                detail.setFaceId1(Integer.toString(i));
-                detail.setFaceId2(candidate.getFaceId());
-                detail.setScore(similarity);
-                detail.setMatched(similarity >= compareParams.getThreshold());
-                details.add(detail);
-
+                // 暂存结果，不立即创建对象
+                detailScores[detailCount] = similarity;
+                detailInputIdx[detailCount] = i;
+                detailCandidateFaceIds[detailCount] = candidate.getFaceId();
+                detailCount++;
             }
         }
 
         // 3. 阈值判断与堆更新
         if (passedBinaryFilter && maxScore >= compareParams.getThreshold()) {
+            // 只有在确认匹配时，才批量创建详情对象
+            List<CompareResult.compareDetails> details = new ArrayList<>(detailCount);
+            for (int i = 0; i < detailCount; i++) {
+                CompareResult.compareDetails detail = new CompareResult.compareDetails();
+                detail.setFaceId1(inputFaceIdStrings[detailInputIdx[i]]);
+                detail.setFaceId2(detailCandidateFaceIds[i]);
+                detail.setScore(detailScores[i]);
+                detail.setMatched(detailScores[i] >= compareParams.getThreshold());
+                details.add(detail);
+            }
+
             CompareResult result = new CompareResult();
             result.setPsnTmplNo(personData.getPersonId());
             result.setScore(maxScore);
             result.setFaceId(maxFaceId);
             result.setMatched(true);
             result.setDetails(details);
+            
             // 如果堆未满，直接添加
             if (localTopNHeap.size() < compareParams.getTopN()) {
                 localTopNHeap.add(result);
