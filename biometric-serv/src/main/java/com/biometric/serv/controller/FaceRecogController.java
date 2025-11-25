@@ -1,15 +1,12 @@
 package com.biometric.serv.controller;
 
 import com.alibaba.fastjson.JSONObject;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.biometric.algo.dto.CompareParams;
 import com.biometric.algo.dto.CompareResult;
 import com.biometric.algo.dto.SocketFaceFeature;
 import com.biometric.algo.service.FaceAlgoService;
 import com.biometric.algo.service.FaceRecogService;
 import com.biometric.algo.util.ImageToBase64Util;
-import com.biometric.serv.entity.FaceFtur;
-import com.biometric.serv.mapper.FaceFturMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.*;
 
 @RestController
@@ -41,9 +37,6 @@ public class FaceRecogController {
     private FaceRecogService faceSearchService;
 
     @Autowired
-    private FaceFturMapper faceFturDMapper;
-
-    @Autowired
     private FaceAlgoService faceAlgoService;
 
     @PostMapping("/compareMore")
@@ -54,7 +47,7 @@ public class FaceRecogController {
             return ResponseEntity.badRequest().body("PersonId is required");
         }
 
-        String filePath = "D:\\Users\\hend\\Desktop\\model\\"+personId+".jpg";
+        String filePath = "D:\\pic\\"+personId+".jpg";
         File file = new File(filePath);
         if(!file.exists()){
             return ResponseEntity.badRequest().body("PersonId not exists");

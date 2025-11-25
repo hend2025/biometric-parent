@@ -26,6 +26,9 @@ public class DataLoadStartupListener implements ApplicationListener<ApplicationR
     @Value("${hazelcast.cluster.members:127.0.0.1}")
     private String members;
 
+    @Value("${hazelcast.cluster.timeout-seconds:300}")
+    private Integer timeoutSeconds;
+
     @Autowired
     private DataLoadService dataLoadService;
 
@@ -76,8 +79,6 @@ public class DataLoadStartupListener implements ApplicationListener<ApplicationR
 
     /**
      * 等待Hazelcast集群达到预期节点数
-     * 如果配置了expectedNodes，会等待直到集群成员数达到预期值
-     * 否则只等待固定时间让集群稳定
      */
     private void waitForClusterReady() throws InterruptedException {
         Integer expectedNodes = members.split(",").length;
@@ -90,16 +91,14 @@ public class DataLoadStartupListener implements ApplicationListener<ApplicationR
         
         // 配置了预期节点数，等待直到达到预期数量
         log.info("等待Hazelcast集群达到预期节点数: {}", expectedNodes);
-        int maxWaitSeconds = 30;
         int waitedSeconds = 0;
-        
-        while (waitedSeconds < maxWaitSeconds) {
+        while (waitedSeconds < timeoutSeconds) {
             int currentSize = hazelcastInstance.getCluster().getMembers().size();
             
             if (currentSize >= expectedNodes) {
                 log.info("集群已达到预期节点数: {}/{}", currentSize, expectedNodes);
-                // 再等待2秒确保集群完全稳定
-                Thread.sleep(2000);
+                // 再等待3秒确保集群完全稳定
+                Thread.sleep(3000);
                 return;
             }
             
@@ -150,8 +149,8 @@ public class DataLoadStartupListener implements ApplicationListener<ApplicationR
             // 降级方案：单节点模式
             info.nodeIndex = 0;
             info.totalNodes = 1;
-            info.currentMemberAddress = "unknown";
-            info.allMemberAddresses = Collections.singletonList("unknown");
+            info.currentMemberAddress = "单节点模式";
+            info.allMemberAddresses = Collections.singletonList("单节点模式");
             return info;
         }
     }
