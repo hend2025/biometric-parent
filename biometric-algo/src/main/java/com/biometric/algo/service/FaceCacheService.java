@@ -27,10 +27,15 @@ public class FaceCacheService {
         if (features == null || features.isEmpty()) {
             return;
         }
+        int capacity = (int) (features.size() / 0.75f) + 1;
         Map<String, PersonFaceData> batchMap = features.stream()
-                .collect(Collectors.toMap(PersonFaceData::getPersonId, Function.identity()));
+                .collect(Collectors.toMap(
+                        PersonFaceData::getPersonId, 
+                        Function.identity(),
+                        (v1, v2) -> v2,
+                        () -> new java.util.HashMap<>(capacity)
+                ));
         faceFeatureMap.putAll(batchMap);
-        log.info("已加载 {} 条人员特征数据到Hazelcast缓存", batchMap.size());
     }
 
     public void clearCache() {

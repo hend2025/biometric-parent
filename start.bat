@@ -1,0 +1,1 @@
+java -jar -Xmx10G -Xms5G -Dfile.encoding=utf-8 -Dsun.jnu.encoding=UTF-8  biometric-serv\target\biometric-serv-1.0.0.jar

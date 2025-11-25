@@ -29,7 +29,7 @@ public class MockDataLoadService {
     private static final int MAX_TEMPLATES_PER_PERSON = 3;
     private static final int MIN_PERSONS_PER_GROUP = 1000;
     private static final int MAX_PERSONS_PER_GROUP = 3000;
-    private static final int BATCH_SIZE = 5000;
+    private static final int BATCH_SIZE = 10000;
     private static final int FEATURE_DATA_SIZE = 512;             // 模拟特征向量字节数
 
     @Autowired
@@ -116,15 +116,19 @@ public class MockDataLoadService {
         log.info("Step 1: 生成分组人员分配...");
         Map<String, List<Integer>> groupToPersonIndices = generateGroupAssignments(totalPersons, totalGroups);
         
-        // Step 2: 反转为人员->分组映射
+        // Step 2: 反转为人员->分组映射（优化版）
         log.info("Step 2: 构建人员分组映射...");
-        Map<Integer, Set<String>> personToGroups = new ConcurrentHashMap<>();
-        for (Map.Entry<String, List<Integer>> entry : groupToPersonIndices.entrySet()) {
+        Map<Integer, Set<String>> personToGroups = new ConcurrentHashMap<>(totalPersons / 10);
+        
+        // 并行处理分组映射反转
+        groupToPersonIndices.entrySet().parallelStream().forEach(entry -> {
             String groupId = entry.getKey();
             for (Integer personIndex : entry.getValue()) {
                 personToGroups.computeIfAbsent(personIndex, k -> ConcurrentHashMap.newKeySet()).add(groupId);
             }
-        }
+            System.out.println("处理分组：" + groupId);
+        });
+        
         log.info("人员分组映射构建完成，共 {} 人有分组", personToGroups.size());
 
         // Step 3: 多线程生成并加载人员数据
@@ -154,25 +158,32 @@ public class MockDataLoadService {
     }
 
     /**
-     * 生成分组人员分配
+     * 生成分组人员分配（优化版）
+     * 使用更高效的策略：每个人分配到1-3个随机分组
      */
     private Map<String, List<Integer>> generateGroupAssignments(int totalPersons, int totalGroups) {
-        Map<String, List<Integer>> groupToPersons = new HashMap<>();
-        Random random = new Random(42); // 固定种子保证可重复
-
+        Map<String, List<Integer>> groupToPersons = new ConcurrentHashMap<>(totalGroups);
+        
+        // 预初始化所有分组，避免并发修改
         for (int g = 0; g < totalGroups; g++) {
             String groupId = String.format("GRP_%08d", g);
-            int groupSize = MIN_PERSONS_PER_GROUP + random.nextInt(MAX_PERSONS_PER_GROUP - MIN_PERSONS_PER_GROUP + 1);
-            
-            List<Integer> personIndices = new ArrayList<>(groupSize);
-            for (int i = 0; i < groupSize; i++) {
-                int personIndex = random.nextInt(totalPersons);
-                personIndices.add(personIndex);
-            }
-            groupToPersons.put(groupId, personIndices);
+            // 预估每个分组约1500人，预分配容量
+            groupToPersons.put(groupId, new ArrayList<>(1800));
+        }
+        
+        Random random = new Random(42);
 
-            if ((g + 1) % 5000 == 0) {
-                log.info("已生成 {}/{} 个分组", g + 1, totalGroups);
+        // 为每个人分配到1-3个随机分组（更符合实际场景且更高效）
+        for (int personIndex = 0; personIndex < totalPersons; personIndex++) {
+            int groupCount = 1 + random.nextInt(3); // 1-3个分组
+            for (int i = 0; i < groupCount; i++) {
+                int groupIndex = random.nextInt(totalGroups);
+                String groupId = String.format("GRP_%08d", groupIndex);
+                groupToPersons.get(groupId).add(personIndex);
+            }
+            
+            if ((personIndex + 1) % 1000000 == 0) {
+                log.info("已分配 {}/{} 人到分组", personIndex + 1, totalPersons);
             }
         }
 
@@ -180,12 +191,13 @@ public class MockDataLoadService {
     }
 
     /**
-     * 生成并加载一批人员数据
+     * 生成并加载一批人员数据（优化版）
      */
     private void generateAndLoadPersonBatch(int startIndex, int endIndex, 
                                             Map<Integer, Set<String>> personToGroups, int threadIndex) {
         Random random = new Random(startIndex); // 使用起始索引作为种子
         List<PersonFaceData> batch = new ArrayList<>(BATCH_SIZE);
+        int processedCount = 0;
 
         for (int i = startIndex; i < endIndex; i++) {
             if (!isRunning.get()) {
@@ -196,10 +208,11 @@ public class MockDataLoadService {
             PersonFaceData person = generatePerson(i, personToGroups.get(i), random);
             batch.add(person);
             generatedPersons.incrementAndGet();
+            processedCount++;
 
             if (batch.size() >= BATCH_SIZE) {
                 loadBatchToCache(batch, threadIndex);
-                batch.clear();
+                batch = new ArrayList<>(BATCH_SIZE); // 创建新列表而不是clear，减少内存碎片
             }
         }
 
@@ -207,10 +220,12 @@ public class MockDataLoadService {
         if (!batch.isEmpty()) {
             loadBatchToCache(batch, threadIndex);
         }
+        
+        log.info("线程 {} 完成，共处理 {} 人", threadIndex, processedCount);
     }
 
     /**
-     * 生成单个人员数据
+     * 生成单个人员数据（优化版）
      */
     private PersonFaceData generatePerson(int personIndex, Set<String> groups, Random random) {
         PersonFaceData person = new PersonFaceData();
@@ -227,30 +242,19 @@ public class MockDataLoadService {
         int templateCount = MIN_TEMPLATES_PER_PERSON + random.nextInt(MAX_TEMPLATES_PER_PERSON - MIN_TEMPLATES_PER_PERSON + 1);
         List<CachedFaceFeature> features = new ArrayList<>(templateCount);
 
+        // 预生成特征数据，减少对象创建
+        byte[] featureData = new byte[FEATURE_DATA_SIZE];
+        
         for (int t = 0; t < templateCount; t++) {
             CachedFaceFeature feature = new CachedFaceFeature();
             feature.setFaceId(String.format("FACE_%010d_%02d", personIndex, t));
             feature.setAlgoType("FACE310");
             feature.setTemplateType("NORMAL");
 
-            // 生成模拟特征数据
-            byte[] featureData = new byte[FEATURE_DATA_SIZE];
+            // 生成模拟特征数据（每个模板使用不同的数据）
             random.nextBytes(featureData);
-            feature.setFeatureData(featureData);
-
-            // 生成模拟二进制特征 (16个int)
-//            int[] binaryFeature = new int[16];
-//            for (int b = 0; b < 16; b++) {
-//                binaryFeature[b] = random.nextInt();
-//            }
-//            feature.setBinaryFeature(binaryFeature);
-//
-//            // 生成模拟浮点特征向量 (128维)
-//            float[] featureVector = new float[128];
-//            for (int f = 0; f < 128; f++) {
-//                featureVector[f] = random.nextFloat() * 2 - 1; // -1 到 1
-//            }
-//            feature.setFeatureVector(featureVector);
+            // 复制数组以避免共享引用
+            feature.setFeatureData(featureData.clone());
 
             features.add(feature);
         }
@@ -260,22 +264,23 @@ public class MockDataLoadService {
     }
 
     /**
-     * 将批量数据加载到缓存
+     * 将批量数据加载到缓存（优化版）
      */
     private void loadBatchToCache(List<PersonFaceData> batch, int threadIndex) {
         try {
             faceCacheService.loadFeatures(batch);
             long loaded = loadedPersons.addAndGet(batch.size());
 
-            if (loaded % 100000 < BATCH_SIZE) {
+            // 减少日志输出频率：每50万人输出一次
+            if (loaded % 500000 < BATCH_SIZE) {
                 long elapsed = (System.currentTimeMillis() - startTime) / 1000;
                 double percent = (loaded * 100.0) / totalPersonsTarget;
                 long rate = elapsed > 0 ? loaded / elapsed : loaded;
-                log.info("线程 {} | 进度: {}/{} ({}%) | 速率: {} 人/秒",
-                        threadIndex, loaded, totalPersonsTarget, String.format("%.2f", percent), rate);
+                log.info("线程 {} | 进度: {}/{} ({}%) | 速率: {} 人/秒 | 已用时: {}s",
+                        threadIndex, loaded, totalPersonsTarget, String.format("%.2f", percent), rate, elapsed);
             }
         } catch (Exception e) {
-            log.error("线程 {} 加载批次失败: {}", threadIndex, e.getMessage());
+            log.error("线程 {} 加载批次失败: {}", threadIndex, e.getMessage(), e);
         }
     }
 
