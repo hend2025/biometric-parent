@@ -40,14 +40,12 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
         }
         inputFloatFeatures = new ArrayList<>();
         inputBinaryFeatures = new ArrayList<>();
+        List<String> faceIdList = new ArrayList<>();
 
         if (compareParams != null && !CollectionUtils.isEmpty(compareParams.getFeatures())) {
-            int size = compareParams.getFeatures().size();
-            inputFaceIdStrings = new String[size];
             int idx = 0;
             for (byte[] feature : compareParams.getFeatures()) {
                 if (feature == null || feature.length == 0) {
-                    inputFaceIdStrings[idx] = Integer.toString(idx);
                     idx++;
                     continue;
                 }
@@ -58,10 +56,12 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
                 if (binaryFeat != null && floatFeat != null) {
                     inputBinaryFeatures.add(binaryFeat);
                     inputFloatFeatures.add(floatFeat);
-                    inputFaceIdStrings[idx] = Integer.toString(idx);
+                    // 保持与 inputBinaryFeatures 索引一致
+                    faceIdList.add(Integer.toString(idx));
                 }
                 idx++;
             }
+            inputFaceIdStrings = faceIdList.toArray(new String[0]);
         }
     }
 
