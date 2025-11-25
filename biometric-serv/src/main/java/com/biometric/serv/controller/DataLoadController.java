@@ -2,6 +2,7 @@ package com.biometric.serv.controller;
 
 import com.biometric.algo.service.FaceCacheService;
 import com.biometric.serv.service.DataLoadService;
+import com.biometric.serv.service.MockDataLoadService;
 import com.hazelcast.cluster.Member;
 import com.hazelcast.core.HazelcastInstance;
 import org.slf4j.Logger;
@@ -29,6 +30,9 @@ public class DataLoadController {
 
     @Autowired
     private HazelcastInstance hazelcastInstance;
+
+    @Autowired
+    private MockDataLoadService mockDataLoadService;
 
     /**
      * 手动触发当前节点加载数据
@@ -191,6 +195,49 @@ public class DataLoadController {
         int totalNodes;
         String currentMemberAddress;
         List<String> allMemberAddresses;
+    }
+
+    // ==================== 模拟数据加载接口 ====================
+
+    /**
+     * 启动模拟数据加载
+     * 模拟从数据库加载数据：生成 N 个人（每人1-3张模板），M 个分组（每组1000-2000人）
+     *
+     * @param totalPersons 总人数（默认1000万）
+     * @param totalGroups  总分组数（默认2万）
+     * @param threadCount  线程数（默认CPU核心数）
+     * @return 启动结果
+     */
+    @PostMapping("/mock/start")
+    public Map<String, Object> startMockDataLoad(
+            @RequestParam(required = false) Integer totalPersons,
+            @RequestParam(required = false) Integer totalGroups,
+            @RequestParam(required = false) Integer threadCount) {
+
+        log.info("收到模拟数据加载请求: totalPersons={}, totalGroups={}, threadCount={}", totalPersons, totalGroups, threadCount);
+
+        return mockDataLoadService.startMockDataLoad(totalPersons*10000, totalGroups, threadCount);
+    }
+
+    /**
+     * 停止模拟数据加载
+     *
+     * @return 停止结果
+     */
+    @PostMapping("/mock/stop")
+    public Map<String, Object> stopMockDataLoad() {
+        log.info("收到停止模拟数据加载请求");
+        return mockDataLoadService.stopMockDataLoad();
+    }
+
+    /**
+     * 查询模拟数据加载进度
+     *
+     * @return 加载进度信息
+     */
+    @GetMapping("/mock/progress")
+    public Map<String, Object> getMockDataLoadProgress() {
+        return mockDataLoadService.getProgress();
     }
 
 }
