@@ -64,7 +64,7 @@ public class FaceRecogController {
         JSONObject images = new JSONObject();
         images.put("0", imageBase64);
 
-        SocketFaceFeature featureResult = faceAlgoService.faceExtractFeature(images, true, false);
+        SocketFaceFeature featureResult = faceAlgoService.faceExtractFeature(images);
         if (featureResult.getReturnId() != 0 || featureResult.getReturnValue() == null) {
             return ResponseEntity.badRequest().body("提取特征失败: " + personId);
         }

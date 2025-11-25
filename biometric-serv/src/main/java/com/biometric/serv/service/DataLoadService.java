@@ -27,11 +27,11 @@ public class DataLoadService {
     private static final int LOG_INTERVAL = 10000;
 
     @Autowired
+    private PsnTmplMapper psnTmplMapper;
+    @Autowired
     private GrpPsnMapper grpPsnMapper;
     @Autowired
     private FaceFturMapper faceFturMapper;
-    @Autowired
-    private PsnTmplMapper psnTmplMapper;
     @Autowired
     private FaceCacheService faceCacheService;
 
@@ -124,9 +124,10 @@ public class DataLoadService {
         if (!personDataList.isEmpty()) {
             faceCacheService.loadFeatures(personDataList);
             long total = totalCounter.addAndGet(personDataList.size());
-            if (total % LOG_INTERVAL < BATCH_SIZE) { // Rough logging
+            if (total % LOG_INTERVAL < BATCH_SIZE) {
                 log.info("Shard {}: Progress: {} persons loaded...", shardIndex, total);
             }
         }
     }
+
 }

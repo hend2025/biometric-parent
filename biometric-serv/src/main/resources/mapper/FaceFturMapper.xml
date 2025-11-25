@@ -17,16 +17,4 @@
             PSN_TMPL_NO
     </select>
 
-    <select id="selectByPsnIds" resultType="com.biometric.serv.entity.FaceFtur">
-        SELECT
-            FACE_BOSG_ID, PSN_TMPL_NO, FACE_FTUR_DATA, FACE_CRTE_TMPL_TYPE, ALGO_VER_ID
-        FROM
-            bosg_face_ftur_d
-        WHERE
-            VALI_FLAG = '1'
-            AND PSN_TMPL_NO IN
-            <foreach collection="psnIds" item="id" open="(" separator="," close=")">
-                #{id}
-            </foreach>
-    </select>
 </mapper>

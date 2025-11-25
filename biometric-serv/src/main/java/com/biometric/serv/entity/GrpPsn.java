@@ -10,6 +10,6 @@ import java.io.Serializable;
 public class GrpPsn implements Serializable {
     @TableId
     private String grpPsnId;
-    private String grpId;
     private String psnTmplNo;
+    private String grpId;
 }

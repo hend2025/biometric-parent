@@ -41,4 +41,5 @@ public class FaceCacheService {
     public IMap<String, PersonFaceData> getFaceFeatureMap() {
         return faceFeatureMap;
     }
+
 }

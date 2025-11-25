@@ -14,15 +14,4 @@
             MOD(CRC32(PSN_TMPL_NO), #{totalShards}) = #{shardIndex}
     </select>
 
-    <select id="selectByPsnIds" resultType="com.biometric.serv.entity.GrpPsn">
-        SELECT
-            GRP_ID, PSN_TMPL_NO
-        FROM
-            bosg_cpr_grp_psn_b
-        WHERE
-            PSN_TMPL_NO IN
-            <foreach collection="psnIds" item="id" open="(" separator="," close=")">
-                #{id}
-            </foreach>
-    </select>
 </mapper>

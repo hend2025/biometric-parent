@@ -60,7 +60,6 @@ public class FaceRecogService {
         if(params.getGroups() == null || CollectionUtils.isEmpty(params.getGroups())){
             result = faceFeatureMap.aggregate(aggregator);
         }else{
-            // Use String group IDs directly
             Predicate<String, PersonFaceData> groupPredicate = Predicates.in("groupIds[any]", params.getGroups().toArray(new String[0]));
             result = faceFeatureMap.aggregate(aggregator, groupPredicate);
         }

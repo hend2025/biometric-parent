@@ -52,6 +52,9 @@ public class FaceAlgoService {
     /**
      * Y01.00 标准特征提取
      */
+    public SocketFaceFeature faceExtractFeature(JSONObject images) {
+        return this.faceExtractFeature(images, true, false);
+    }
     public SocketFaceFeature faceExtractFeature(JSONObject images, boolean rotate, boolean needQuality) {
         return socketClient.execute(
                 AlgoRequest.builder()
@@ -69,6 +72,9 @@ public class FaceAlgoService {
     /**
      * Y01.01 移动端/带坐标特征提取
      */
+    public SocketFaceFeature faceExtractMobile(JSONObject images){
+        return this.faceExtractMobile(images, null, false);
+    }
     public SocketFaceFeature faceExtractMobile(JSONObject images, JSONObject facesRect, boolean needQuality) {
         AlgoRequest request = AlgoRequest.builder()
                 .command(EXTRACT_MOBILE)
@@ -160,8 +166,6 @@ public class FaceAlgoService {
         }
         return socketClient.execute(request, SocketFaceDetectResult.class);
     }
-
-    // ==================== Private Helper Methods ====================
 
     private AlgoRequest createQualityRequest(AlgoCommand command, JSONObject images) {
         return AlgoRequest.builder()
