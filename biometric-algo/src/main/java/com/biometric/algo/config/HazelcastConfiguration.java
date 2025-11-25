@@ -53,7 +53,8 @@ public class HazelcastConfiguration {
         mapConfig.setAsyncBackupCount(0);
         mapConfig.setReadBackupData(true);
 
-        mapConfig.setInMemoryFormat(InMemoryFormat.OBJECT);
+        // 模式会导致堆内存中存在数百万个 Java 小对象，引发频繁 Full GC
+        mapConfig.setInMemoryFormat(InMemoryFormat.BINARY);
 
         mapConfig.setStatisticsEnabled(true);
         mapConfig.setPerEntryStatsEnabled(false);
@@ -62,12 +63,9 @@ public class HazelcastConfiguration {
         groupIndex.setName("idx_group_ids");
         mapConfig.addIndexConfig(groupIndex);
 
-        IndexConfig personIndex = new IndexConfig(IndexType.HASH, "personId");
-        personIndex.setName("idx_person_id");
-        mapConfig.addIndexConfig(personIndex);
-
         config.addMapConfig(mapConfig);
 
+        // 优化序列化配置
         config.getSerializationConfig()
                 .setAllowUnsafe(true)
                 .setUseNativeByteOrder(true)
