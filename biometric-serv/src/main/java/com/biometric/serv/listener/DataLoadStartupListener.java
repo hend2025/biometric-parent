@@ -73,7 +73,7 @@ public class DataLoadStartupListener implements ApplicationListener<ApplicationR
 
         } catch (Exception e) {
             log.error("节点数据加载失败", e);
-            throw new RuntimeException("Failed to load data for current node", e);
+            throw new RuntimeException("当前节点数据加载失败", e);
         }
     }
 

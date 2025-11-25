@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * 数据加载控制器
+ */
 @RestController
 @RequestMapping("/api/data-load")
 public class DataLoadController {
@@ -161,10 +164,11 @@ public class DataLoadController {
     private NodeInfo getNodeInfo() {
         NodeInfo info = new NodeInfo();
 
-        // 从Hazelcast集群中获取
+        // 从Hazelcast集群中获取节点信息
         Set<Member> members = hazelcastInstance.getCluster().getMembers();
         Member localMember = hazelcastInstance.getCluster().getLocalMember();
 
+        // 按地址排序确保顺序一致
         List<Member> sortedMembers = new ArrayList<>(members);
         sortedMembers.sort(Comparator.comparing(m -> m.getAddress().toString()));
 
@@ -179,6 +183,9 @@ public class DataLoadController {
         return info;
     }
 
+    /**
+     * 节点信息
+     */
     private static class NodeInfo {
         int nodeIndex;
         int totalNodes;
