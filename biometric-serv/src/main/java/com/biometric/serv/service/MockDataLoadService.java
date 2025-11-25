@@ -115,6 +115,7 @@ public class MockDataLoadService {
         // Step 1: 预先生成分组->人员映射关系
         log.info("Step 1: 生成分组人员分配...");
         Map<String, List<Integer>> groupToPersonIndices = generateGroupAssignments(totalPersons, totalGroups);
+        log.info("人员分组映射构建完成，共 {} 分组", groupToPersonIndices.size());
         
         // Step 2: 反转为人员->分组映射（优化版）
         log.info("Step 2: 构建人员分组映射...");
@@ -126,7 +127,6 @@ public class MockDataLoadService {
             for (Integer personIndex : entry.getValue()) {
                 personToGroups.computeIfAbsent(personIndex, k -> ConcurrentHashMap.newKeySet()).add(groupId);
             }
-            System.out.println("处理分组：" + groupId);
         });
         
         log.info("人员分组映射构建完成，共 {} 人有分组", personToGroups.size());

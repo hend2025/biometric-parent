@@ -46,4 +46,14 @@ hazelcast:
     # 多节点集群模式超时时间（秒）
     timeout-seconds: 30
 
+logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/biometric-serv.log
+
 
