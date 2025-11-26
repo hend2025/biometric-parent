@@ -14,7 +14,7 @@ import java.util.Map;
 @Service
 public class FaceCacheService {
     private static final Logger log = LoggerFactory.getLogger(FaceCacheService.class);
-    private static final int SUB_BATCH_SIZE = 2000;  // 分批写入，避免单次过大触发Full GC
+    private static final int SUB_BATCH_SIZE = 2000;
     private final IMap<String, PersonFaceData> faceFeatureMap;
 
     @Autowired

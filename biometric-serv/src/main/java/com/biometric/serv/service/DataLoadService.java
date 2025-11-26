@@ -24,25 +24,21 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 优化后的数据加载服务
- * 采用生产者-消费者模型并行加载，大幅提升吞吐量
  */
 @Service
 public class DataLoadService implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(DataLoadService.class);
 
-    // 批次大小，建议根据数据库网络包大小调整，2000是一个比较通用的值
     private static final int BATCH_SIZE = 2000;
-    // 日志打印间隔
     private static final int LOG_INTERVAL = 20000;
-
     private static final String DEFAULT_GROUP_ID = "DEFAULT_GROUP";
+
+    @Value("${biometric.face-loader.minFeat:true}")
+    private boolean minFeat;
 
     @Value("${biometric.face-loader.maxFeat:false}")
     private boolean maxFeat;
-
-    @Value("${biometric.face-loader.minFeat:false}")
-    private boolean minFeat;
 
     @Value("${biometric.face-loader.allPerson:false}")
     private boolean allPerson;
@@ -179,21 +175,23 @@ public class DataLoadService implements DisposableBean {
             if (f.getFaceBosgId() != null && rawData != null && rawData.length > 0) {
                 CachedFaceFeature cachedFeature = new CachedFaceFeature();
                 cachedFeature.setFaceId(f.getFaceBosgId());
-                // cachedFeature.setFeatureData(rawData); // 如果内存紧张，可注释掉原始byte[]的存储
+                cachedFeature.setFeatureData(rawData);
                 cachedFeature.setTemplateType(f.getFaceCrteTmplType());
                 cachedFeature.setAlgoType(f.getAlgoVerId());
 
                 try {
                     // 核心优化：并行计算二进制特征和浮点向量
-                    int[] binaryFeat = Face303JavaCalcuater.getBinaFeat(rawData);
-                    cachedFeature.setBinaryFeature(binaryFeat);
-
-                    float[] floatFeat = Face303JavaCalcuater.toFloatArray(rawData);
-                    cachedFeature.setFeatureVector(floatFeat);
-
-                    if (binaryFeat != null && floatFeat != null) {
-                        psnToFeatures.computeIfAbsent(f.getPsnTmplNo(), k -> new ArrayList<>()).add(cachedFeature);
+                    if(maxFeat){
+                        int[] binaryFeat = Face303JavaCalcuater.getBinaFeat(rawData);
+                        cachedFeature.setBinaryFeature(binaryFeat);
                     }
+
+                    if(maxFeat){
+                        float[] floatFeat = Face303JavaCalcuater.toFloatArray(rawData);
+                        cachedFeature.setFeatureVector(floatFeat);
+                    }
+
+                    psnToFeatures.computeIfAbsent(f.getPsnTmplNo(), k -> new ArrayList<>()).add(cachedFeature);
                 } catch (Exception e) {
                     log.warn("Feature conversion failed for face: {}", f.getFaceBosgId());
                 }
@@ -209,19 +207,15 @@ public class DataLoadService implements DisposableBean {
             }
 
             Set<String> grpSet = psnToGroups.get(psnId);
+            if ((grpSet == null || grpSet.isEmpty()) && !allPerson) {
+                continue;
+            }
 
-            // 组信息处理逻辑
             if (grpSet == null) {
                 grpSet = new HashSet<>();
-            }
-            if (grpSet.isEmpty()) {
-                // 如果没有组且配置为只加载所有，或者为了防止遗漏，赋予默认组
-                if (!allPerson) {
-                    grpSet.add(DEFAULT_GROUP_ID);
-                } else {
-                    // 如果业务允许无组，这里可以不加默认组，但Hazelcast索引可能需要处理null
-                    grpSet.add(DEFAULT_GROUP_ID);
-                }
+                grpSet.add(DEFAULT_GROUP_ID);
+            }else if (grpSet.isEmpty()) {
+                grpSet.add(DEFAULT_GROUP_ID);
             }
 
             PersonFaceData data = new PersonFaceData();
