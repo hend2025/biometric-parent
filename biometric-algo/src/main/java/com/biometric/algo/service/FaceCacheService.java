@@ -10,12 +10,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 public class FaceCacheService {
     private static final Logger log = LoggerFactory.getLogger(FaceCacheService.class);
+    private static final int SUB_BATCH_SIZE = 2000;  // 分批写入，避免单次过大触发Full GC
     private final IMap<String, PersonFaceData> faceFeatureMap;
 
     @Autowired
@@ -27,15 +26,40 @@ public class FaceCacheService {
         if (features == null || features.isEmpty()) {
             return;
         }
-        int capacity = (int) (features.size() / 0.75f) + 1;
-        Map<String, PersonFaceData> batchMap = features.stream()
-                .collect(Collectors.toMap(
-                        PersonFaceData::getPersonId, 
-                        Function.identity(),
-                        (v1, v2) -> v2,
-                        () -> new java.util.HashMap<>(capacity)
-                ));
-        faceFeatureMap.putAll(batchMap);
+        
+        int totalSize = features.size();
+        // 分批写入Hazelcast，避免单次写入过大导致内存峰值和Full GC
+        if (totalSize <= SUB_BATCH_SIZE) {
+            putAllToHazelcast(features);
+        } else {
+            for (int i = 0; i < totalSize; i += SUB_BATCH_SIZE) {
+                int end = Math.min(i + SUB_BATCH_SIZE, totalSize);
+                putAllToHazelcast(features.subList(i, end));
+            }
+        }
+    }
+    
+    private void putAllToHazelcast(List<PersonFaceData> batch) {
+        if (batch == null || batch.isEmpty()) {
+            return;
+        }
+        
+        try {
+            int capacity = (int) (batch.size() / 0.75f) + 1;
+            Map<String, PersonFaceData> batchMap = new java.util.HashMap<>(capacity);
+            
+            // 手动构建Map，避免Stream的额外开销
+            for (PersonFaceData data : batch) {
+                batchMap.put(data.getPersonId(), data);
+            }
+            
+            faceFeatureMap.putAll(batchMap);
+            batchMap.clear();  // 显式清理，帮助GC
+            
+        } catch (Exception e) {
+            log.error("批量写入Hazelcast失败，批次大小: {}", batch.size(), e);
+            throw e;
+        }
     }
 
     public void clearCache() {

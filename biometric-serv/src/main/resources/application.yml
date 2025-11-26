@@ -1,5 +1,5 @@
 server:
-  port: 7080
+  port: 7082
 
 spring:
   application:
@@ -40,9 +40,9 @@ hazelcast:
   cluster:
     name: biometric-hazelcast-instance
     # 单机模式
-    # members: 127.0.0.1
+    members: 127.0.0.1
     # 多节点集群模式（配置所有节点的IP地址）
-    members: 192.168.57.225,192.168.137.70
+#    members: 192.168.57.225,192.168.137.70
     # 多节点集群模式超时时间（秒）
     timeout-seconds: 30
 

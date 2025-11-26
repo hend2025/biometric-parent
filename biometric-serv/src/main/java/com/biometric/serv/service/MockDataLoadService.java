@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -23,13 +24,11 @@ public class MockDataLoadService {
     private static final Logger log = LoggerFactory.getLogger(MockDataLoadService.class);
 
     // 默认配置
-    private static final int DEFAULT_TOTAL_PERSONS = 10_000_000;  // 1000万人
-    private static final int DEFAULT_TOTAL_GROUPS = 20_000;       // 2万个分组
+    private static final int DEFAULT_TOTAL_PERSONS = 10_000_00;  // 100万人
+    private static final int DEFAULT_TOTAL_GROUPS = 20_00;       // 2万个分组
     private static final int MIN_TEMPLATES_PER_PERSON = 1;
     private static final int MAX_TEMPLATES_PER_PERSON = 3;
-    private static final int MIN_PERSONS_PER_GROUP = 1000;
-    private static final int MAX_PERSONS_PER_GROUP = 3000;
-    private static final int BATCH_SIZE = 10000;
+    private static final int BATCH_SIZE = 5000;  // 平衡内存和写入次数
     private static final int FEATURE_DATA_SIZE = 512;             // 模拟特征向量字节数
 
     @Autowired
@@ -39,6 +38,7 @@ public class MockDataLoadService {
     private final AtomicLong generatedPersons = new AtomicLong(0);
     private final AtomicLong loadedPersons = new AtomicLong(0);
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
+    private final AtomicInteger threadCounter = new AtomicInteger(0);
     private volatile long startTime = 0;
     private volatile long endTime = 0;
     private volatile int totalPersonsTarget = 0;
@@ -74,9 +74,10 @@ public class MockDataLoadService {
         errorMessage = null;
         isRunning.set(true);
 
-        // 创建线程池
+        // 创建线程池 - 使用AtomicInteger避免线程名重复
+        threadCounter.set(0);
         executorService = Executors.newFixedThreadPool(threads, r -> {
-            Thread t = new Thread(r, "MockDataLoader-" + System.currentTimeMillis());
+            Thread t = new Thread(r, "MockDataLoader-" + threadCounter.incrementAndGet());
             t.setDaemon(true);
             return t;
         });
@@ -107,32 +108,13 @@ public class MockDataLoadService {
     }
 
     /**
-     * 执行数据加载
+     * 执行数据加载（优化版：无需预先构建大型映射）
      */
     private void executeDataLoad(int totalPersons, int totalGroups, int threadCount) throws Exception {
-        log.info("开始生成模拟数据: {} 人, {} 分组, {} 线程", totalPersons, totalGroups, threadCount);
+        log.info("开始生成模拟数据: {} 人, {} 分组, {} 线程 [内存优化模式]", totalPersons, totalGroups, threadCount);
+        log.info("使用确定性算法动态计算分组，无需预先构建映射表");
 
-        // Step 1: 预先生成分组->人员映射关系
-        log.info("Step 1: 生成分组人员分配...");
-        Map<String, List<Integer>> groupToPersonIndices = generateGroupAssignments(totalPersons, totalGroups);
-        log.info("人员分组映射构建完成，共 {} 分组", groupToPersonIndices.size());
-        
-        // Step 2: 反转为人员->分组映射（优化版）
-        log.info("Step 2: 构建人员分组映射...");
-        Map<Integer, Set<String>> personToGroups = new ConcurrentHashMap<>(totalPersons / 10);
-        
-        // 并行处理分组映射反转
-        groupToPersonIndices.entrySet().parallelStream().forEach(entry -> {
-            String groupId = entry.getKey();
-            for (Integer personIndex : entry.getValue()) {
-                personToGroups.computeIfAbsent(personIndex, k -> ConcurrentHashMap.newKeySet()).add(groupId);
-            }
-        });
-        
-        log.info("人员分组映射构建完成，共 {} 人有分组", personToGroups.size());
-
-        // Step 3: 多线程生成并加载人员数据
-        log.info("Step 3: 多线程生成人员数据...");
+        // 直接多线程生成并加载人员数据，使用确定性算法动态计算分组
         int personsPerThread = totalPersons / threadCount;
         List<Future<?>> futures = new ArrayList<>();
 
@@ -142,7 +124,7 @@ public class MockDataLoadService {
             final int endIndex = (t == threadCount - 1) ? totalPersons : startIndex + personsPerThread;
 
             Future<?> future = executorService.submit(() -> {
-                generateAndLoadPersonBatch(startIndex, endIndex, personToGroups, threadIndex);
+                generateAndLoadPersonBatch(startIndex, endIndex, totalGroups, threadIndex);
             });
             futures.add(future);
         }
@@ -158,43 +140,37 @@ public class MockDataLoadService {
     }
 
     /**
-     * 生成分组人员分配（优化版）
-     * 使用更高效的策略：每个人分配到1-3个随机分组
+     * 使用确定性哈希算法为人员动态计算分组（无需预先构建映射）
+     * 每个人分配到1-3个分组，基于personIndex的哈希值确定
      */
-    private Map<String, List<Integer>> generateGroupAssignments(int totalPersons, int totalGroups) {
-        Map<String, List<Integer>> groupToPersons = new ConcurrentHashMap<>(totalGroups);
+    private String[] calculatePersonGroups(int personIndex, int totalGroups) {
+        // 使用personIndex作为种子，保证确定性和可重复性
+        Random random = new Random(personIndex * 31L + 17L);
         
-        // 预初始化所有分组，避免并发修改
-        for (int g = 0; g < totalGroups; g++) {
-            String groupId = String.format("GRP_%08d", g);
-            // 预估每个分组约1500人，预分配容量
-            groupToPersons.put(groupId, new ArrayList<>(1800));
-        }
+        // 每个人分配到1-3个分组
+        int groupCount = 1 + random.nextInt(3);
+        String[] groups = new String[groupCount];
         
-        Random random = new Random(42);
-
-        // 为每个人分配到1-3个随机分组（更符合实际场景且更高效）
-        for (int personIndex = 0; personIndex < totalPersons; personIndex++) {
-            int groupCount = 1 + random.nextInt(3); // 1-3个分组
-            for (int i = 0; i < groupCount; i++) {
-                int groupIndex = random.nextInt(totalGroups);
-                String groupId = String.format("GRP_%08d", groupIndex);
-                groupToPersons.get(groupId).add(personIndex);
-            }
+        // 使用Set避免重复分组
+        Set<Integer> selectedGroups = new HashSet<>(groupCount);
+        for (int i = 0; i < groupCount; i++) {
+            int groupIndex;
+            do {
+                groupIndex = random.nextInt(totalGroups);
+            } while (selectedGroups.contains(groupIndex));
             
-            if ((personIndex + 1) % 1000000 == 0) {
-                log.info("已分配 {}/{} 人到分组", personIndex + 1, totalPersons);
-            }
+            selectedGroups.add(groupIndex);
+            groups[i] = String.format("GRP_%08d", groupIndex);
         }
-
-        return groupToPersons;
+        
+        return groups;
     }
 
     /**
-     * 生成并加载一批人员数据（优化版）
+     * 生成并加载一批人员数据（内存优化版：动态计算分组）
      */
     private void generateAndLoadPersonBatch(int startIndex, int endIndex, 
-                                            Map<Integer, Set<String>> personToGroups, int threadIndex) {
+                                            int totalGroups, int threadIndex) {
         Random random = new Random(startIndex); // 使用起始索引作为种子
         List<PersonFaceData> batch = new ArrayList<>(BATCH_SIZE);
         int processedCount = 0;
@@ -205,14 +181,18 @@ public class MockDataLoadService {
                 break;
             }
 
-            PersonFaceData person = generatePerson(i, personToGroups.get(i), random);
+            // 动态计算该人员的分组，无需查询预构建的映射表
+            String[] groups = calculatePersonGroups(i, totalGroups);
+            PersonFaceData person = generatePerson(i, groups, random);
             batch.add(person);
             generatedPersons.incrementAndGet();
             processedCount++;
 
             if (batch.size() >= BATCH_SIZE) {
                 loadBatchToCache(batch, threadIndex);
-                batch = new ArrayList<>(BATCH_SIZE); // 创建新列表而不是clear，减少内存碎片
+                batch.clear(); // 清空列表，复用对象
+                batch = null;  // 帮助GC
+                batch = new ArrayList<>(BATCH_SIZE);
             }
         }
 
@@ -220,30 +200,25 @@ public class MockDataLoadService {
         if (!batch.isEmpty()) {
             loadBatchToCache(batch, threadIndex);
         }
+        batch.clear();
+        batch = null;
         
         log.info("线程 {} 完成，共处理 {} 人", threadIndex, processedCount);
     }
 
     /**
-     * 生成单个人员数据（优化版）
+     * 生成单个人员数据（内存优化版）
      */
-    private PersonFaceData generatePerson(int personIndex, Set<String> groups, Random random) {
+    private PersonFaceData generatePerson(int personIndex, String[] groups, Random random) {
         PersonFaceData person = new PersonFaceData();
         person.setPersonId(String.format("PSN_%010d", personIndex));
 
-        // 设置分组
-        if (groups != null && !groups.isEmpty()) {
-            person.setGroupIds(groups.toArray(new String[0]));
-        } else {
-            person.setGroupIds(new String[]{"DEFAULT_GROUP"});
-        }
+        // 设置分组（直接使用传入的数组，避免额外转换）
+        person.setGroupIds(groups);
 
         // 生成1-3张人脸模板
         int templateCount = MIN_TEMPLATES_PER_PERSON + random.nextInt(MAX_TEMPLATES_PER_PERSON - MIN_TEMPLATES_PER_PERSON + 1);
         List<CachedFaceFeature> features = new ArrayList<>(templateCount);
-
-        // 预生成特征数据，减少对象创建
-        byte[] featureData = new byte[FEATURE_DATA_SIZE];
         
         for (int t = 0; t < templateCount; t++) {
             CachedFaceFeature feature = new CachedFaceFeature();
@@ -251,10 +226,10 @@ public class MockDataLoadService {
             feature.setAlgoType("FACE310");
             feature.setTemplateType("NORMAL");
 
-            // 生成模拟特征数据（每个模板使用不同的数据）
+            // 生成模拟特征数据（每个模板独立生成，避免共享引用）
+            byte[] featureData = new byte[FEATURE_DATA_SIZE];
             random.nextBytes(featureData);
-            // 复制数组以避免共享引用
-            feature.setFeatureData(featureData.clone());
+            feature.setFeatureData(featureData);
 
             features.add(feature);
         }
@@ -264,21 +239,56 @@ public class MockDataLoadService {
     }
 
     /**
-     * 将批量数据加载到缓存（优化版）
+     * 将批量数据加载到缓存（优化版：自适应流控）
      */
     private void loadBatchToCache(List<PersonFaceData> batch, int threadIndex) {
         try {
             faceCacheService.loadFeatures(batch);
             long loaded = loadedPersons.addAndGet(batch.size());
 
-            // 减少日志输出频率：每50万人输出一次
-            if (loaded % 500000 < BATCH_SIZE) {
+            // 减少日志输出频率：每100万人输出一次（从50万提升到100万）
+            if (loaded % 1000000 < BATCH_SIZE) {
                 long elapsed = (System.currentTimeMillis() - startTime) / 1000;
                 double percent = (loaded * 100.0) / totalPersonsTarget;
                 long rate = elapsed > 0 ? loaded / elapsed : loaded;
-                log.info("线程 {} | 进度: {}/{} ({}%) | 速率: {} 人/秒 | 已用时: {}s",
-                        threadIndex, loaded, totalPersonsTarget, String.format("%.2f", percent), rate, elapsed);
+                
+                // 输出内存使用情况
+                Runtime runtime = Runtime.getRuntime();
+                long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+                long maxMemory = runtime.maxMemory();
+                double memoryUsage = (usedMemory * 100.0) / maxMemory;
+                
+                log.info("线程 {} | 进度: {}/{} ({}%) | 速率: {} 人/秒 | 已用时: {}s | 堆内存: {}%",
+                        threadIndex, loaded, totalPersonsTarget, String.format("%.2f", percent), 
+                        rate, elapsed, String.format("%.1f", memoryUsage));
             }
+            
+            // 自适应流控：根据内存压力动态调整延迟（优化版）
+            if (batch.size() >= BATCH_SIZE) {
+                Runtime runtime = Runtime.getRuntime();
+                long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+                long maxMemory = runtime.maxMemory();
+                double memoryUsage = (usedMemory * 100.0) / maxMemory;
+                
+                int sleepTime = 20;  // 基础延迟降低到20ms（从50ms优化）
+                if (memoryUsage > 90) {
+                    sleepTime = 200;  // 内存>90%，延迟200ms
+                    // 只在内存压力极高时输出WARN日志，且降低频率
+                    if (loaded % 100000 < BATCH_SIZE) {
+                        log.warn("线程 {} 内存压力极高: {}%，增加延迟到 {}ms", threadIndex, 
+                                String.format("%.1f", memoryUsage), sleepTime);
+                    }
+                } else if (memoryUsage > 85) {
+                    sleepTime = 100;  // 内存>85%，延迟100ms
+                } else if (memoryUsage > 75) {
+                    sleepTime = 50;  // 内存>75%，延迟50ms
+                }
+                
+                Thread.sleep(sleepTime);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("线程 {} 被中断", threadIndex);
         } catch (Exception e) {
             log.error("线程 {} 加载批次失败: {}", threadIndex, e.getMessage(), e);
         }

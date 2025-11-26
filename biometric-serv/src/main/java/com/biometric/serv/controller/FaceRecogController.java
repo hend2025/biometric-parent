@@ -40,26 +40,25 @@ public class FaceRecogController {
     private FaceAlgoService faceAlgoService;
 
     @PostMapping("/compareMore")
-    public ResponseEntity<?> compareMore(@RequestParam(required = true) String personId,
+    public ResponseEntity<?> compareMore(@RequestParam(required = true) String fileName,
                                          @RequestParam(required = false) String groupIds) throws IOException {
-        if (personId == null || personId.trim().isEmpty()) {
-            log.error("PersonId is null or empty");
-            return ResponseEntity.badRequest().body("PersonId is required");
+        if (fileName == null || fileName.trim().isEmpty()) {
+            log.error("fileName is null or empty");
+            return ResponseEntity.badRequest().body("fileName is required");
         }
 
-        String filePath = "D:\\pic\\"+personId+".jpg";
-        File file = new File(filePath);
+        File file = new File(fileName);
         if(!file.exists()){
-            return ResponseEntity.badRequest().body("PersonId not exists");
+            return ResponseEntity.badRequest().body("fileName not exists");
         }
 
-        String imageBase64 = ImageToBase64Util.convertImageToBase64(filePath);
+        String imageBase64 = ImageToBase64Util.convertImageToBase64(fileName);
         JSONObject images = new JSONObject();
         images.put("0", imageBase64);
 
         SocketFaceFeature featureResult = faceAlgoService.faceExtractFeature(images);
         if (featureResult.getReturnId() != 0 || featureResult.getReturnValue() == null) {
-            return ResponseEntity.badRequest().body("提取特征失败: " + personId);
+            return ResponseEntity.badRequest().body("提取特征失败");
         }
 
         List<byte[]> features = new ArrayList<>();
@@ -81,7 +80,7 @@ public class FaceRecogController {
 
         List<CompareResult> resultList = faceSearchService.recogOneToMany(recogParam);
 
-        log.info("Face recognition completed for personId: {}, found {} matches", personId, resultList.size());
+        log.info("Face recognition completed, found {} matches", resultList.size());
         return ResponseEntity.ok(resultList);
     }
 
