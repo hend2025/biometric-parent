@@ -37,7 +37,7 @@ public class DataLoadService implements DisposableBean {
     @Value("${biometric.face-loader.minFeat:true}")
     private boolean minFeat;
 
-    @Value("${biometric.face-loader.maxFeat:false}")
+    @Value("${biometric.face-loader.maxFeat:true}")
     private boolean maxFeat;
 
     @Value("${biometric.face-loader.allPerson:false}")
@@ -175,13 +175,15 @@ public class DataLoadService implements DisposableBean {
             if (f.getFaceBosgId() != null && rawData != null && rawData.length > 0) {
                 CachedFaceFeature cachedFeature = new CachedFaceFeature();
                 cachedFeature.setFaceId(f.getFaceBosgId());
-                cachedFeature.setFeatureData(rawData);
                 cachedFeature.setTemplateType(f.getFaceCrteTmplType());
                 cachedFeature.setAlgoType(f.getAlgoVerId());
+                if(f.getAlgoVerId().toUpperCase().contains("NX")){
+                    cachedFeature.setFeatureData(rawData);
+                }
 
                 try {
                     // 核心优化：并行计算二进制特征和浮点向量
-                    if(maxFeat){
+                    if(minFeat){
                         int[] binaryFeat = Face303JavaCalcuater.getBinaFeat(rawData);
                         cachedFeature.setBinaryFeature(binaryFeat);
                     }

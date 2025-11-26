@@ -28,8 +28,8 @@ biometric:
       default-fingerprint-version: FINGERPRINT30
 
   face-loader:
-      maxFeat: false
-      minFeat: false
+      maxFeat: true
+      minFeat: true
       allPerson: false
 
   recognition:
