@@ -26,7 +26,7 @@ public class DataLoadStartupListener implements ApplicationListener<ApplicationR
     @Value("${hazelcast.cluster.members:127.0.0.1}")
     private String members;
 
-    @Value("${hazelcast.cluster.timeout-seconds:300}")
+    @Value("${biometric.face-loader.timeout-seconds:300}")
     private Integer timeoutSeconds;
 
     @Autowired

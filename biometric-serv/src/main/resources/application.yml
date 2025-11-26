@@ -31,6 +31,7 @@ biometric:
       maxFeat: true
       minFeat: true
       allPerson: false
+      timeout-seconds: 30
 
   recognition:
     threshold: 0.6
@@ -43,8 +44,9 @@ hazelcast:
     members: 127.0.0.1
     # 多节点集群模式（配置所有节点的IP地址）
 #    members: 192.168.57.225,192.168.137.70
-    # 多节点集群模式超时时间（秒）
-    timeout-seconds: 30
+  backup:
+    enabled: false
+    count: 1
 
 logging:
   charset:
