@@ -8,13 +8,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
 public class FaceCacheService {
     private static final Logger log = LoggerFactory.getLogger(FaceCacheService.class);
-    private static final int SUB_BATCH_SIZE = 2000;
+
+    // 增加批次大小以减少网络交互次数
+    private static final int SUB_BATCH_SIZE = 5000;
     private final IMap<String, PersonFaceData> faceFeatureMap;
 
     @Autowired
@@ -23,47 +27,39 @@ public class FaceCacheService {
     }
 
     public void loadFeatures(List<PersonFaceData> features) {
-        if (features == null || features.isEmpty()) {
-            return;
-        }
-        
-        int totalSize = features.size();
-        // 分批写入Hazelcast，避免单次写入过大导致内存峰值和Full GC
-        if (totalSize <= SUB_BATCH_SIZE) {
+        if (features == null || features.isEmpty()) return;
+
+        // 如果批次正好合适，直接转 Map 写入，避免 subList 创建的开销
+        if (features.size() <= SUB_BATCH_SIZE) {
             putAllToHazelcast(features);
         } else {
+            // 大批次拆分
+            int totalSize = features.size();
             for (int i = 0; i < totalSize; i += SUB_BATCH_SIZE) {
                 int end = Math.min(i + SUB_BATCH_SIZE, totalSize);
                 putAllToHazelcast(features.subList(i, end));
             }
         }
     }
-    
+
     private void putAllToHazelcast(List<PersonFaceData> batch) {
-        if (batch == null || batch.isEmpty()) {
-            return;
-        }
-        
         try {
-            int capacity = (int) (batch.size() / 0.75f) + 1;
-            Map<String, PersonFaceData> batchMap = new java.util.HashMap<>(capacity);
-            
-            // 手动构建Map，避免Stream的额外开销
+            // 指定 HashMap 大小，避免 resize 扩容开销
+            Map<String, PersonFaceData> batchMap = new HashMap<>((int)(batch.size() / 0.75) + 1);
+
             for (PersonFaceData data : batch) {
                 batchMap.put(data.getPersonId(), data);
             }
-            
+
+            // Hazelcast 的 putAll 是最高效的批量写入方式
             faceFeatureMap.putAll(batchMap);
-            batchMap.clear();  // 显式清理，帮助GC
-            
+
         } catch (Exception e) {
-            log.error("批量写入Hazelcast失败，批次大小: {}", batch.size(), e);
-            throw e;
+            log.error("Hazelcast 批量写入失败", e);
         }
     }
 
     public void clearCache() {
-        log.warn("正在清空Hazelcast缓存中的所有人脸特征...");
         faceFeatureMap.clear();
     }
 
