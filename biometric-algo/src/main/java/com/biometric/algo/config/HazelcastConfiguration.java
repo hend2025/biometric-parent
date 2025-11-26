@@ -53,7 +53,7 @@ public class HazelcastConfiguration {
         mapConfig.setAsyncBackupCount(0);
         mapConfig.setReadBackupData(true);
 
-        // 模式会导致堆内存中存在数百万个 Java 小对象，引发频繁 Full GC
+        // 关键点：使用 BINARY 格式配合 Hazelcast 序列化效果最好
         mapConfig.setInMemoryFormat(InMemoryFormat.BINARY);
 
         mapConfig.setStatisticsEnabled(true);
@@ -65,8 +65,12 @@ public class HazelcastConfiguration {
 
         config.addMapConfig(mapConfig);
 
-        // 优化序列化配置
+        // --- 注册自定义序列化工厂 ---
         config.getSerializationConfig()
+                .addDataSerializableFactory(
+                        BiometricDataSerializableFactory.FACTORY_ID,
+                        new BiometricDataSerializableFactory()
+                )
                 .setAllowUnsafe(true)
                 .setUseNativeByteOrder(true)
                 .setEnableCompression(false)
