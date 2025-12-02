@@ -43,13 +43,13 @@ public class FaceRecogController {
     public ResponseEntity<?> compareMore(@RequestParam(required = true) String fileName,
                                          @RequestParam(required = false) String groupIds) throws IOException {
         if (fileName == null || fileName.trim().isEmpty()) {
-            log.error("fileName is null or empty");
-            return ResponseEntity.badRequest().body("fileName is required");
+            log.error("文件名为空或为空字符串");
+            return ResponseEntity.badRequest().body("文件名是必需的");
         }
 
         File file = new File(fileName);
         if(!file.exists()){
-            return ResponseEntity.badRequest().body("fileName not exists");
+            return ResponseEntity.badRequest().body("文件不存在");
         }
 
         String imageBase64 = ImageToBase64Util.convertImageToBase64(fileName);
@@ -80,7 +80,7 @@ public class FaceRecogController {
 
         List<CompareResult> resultList = faceSearchService.recogOneToMany(recogParam);
 
-        log.info("Face recognition completed, found {} matches", resultList.size());
+        log.info("人脸识别完成，找到 {} 个匹配结果", resultList.size());
         return ResponseEntity.ok(resultList);
     }
 

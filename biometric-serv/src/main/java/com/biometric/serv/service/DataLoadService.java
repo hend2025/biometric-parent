@@ -30,8 +30,8 @@ public class DataLoadService implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(DataLoadService.class);
 
-    private static final int BATCH_SIZE = 2000;
-    private static final int LOG_INTERVAL = 20000;
+    private static final int BATCH_SIZE = 1000;
+    private static final int LOG_INTERVAL = 50000;
     private static final String DEFAULT_GROUP_ID = "DEFAULT_GROUP";
 
     @Value("${biometric.face-loader.minFeat:true}")
@@ -57,11 +57,11 @@ public class DataLoadService implements DisposableBean {
 
     public DataLoadService() {
         int cores = Runtime.getRuntime().availableProcessors();
-        // 核心线程数：CPU核心数，最大线程数：核心数*2
+        // 核心线程数：减半避免过多并发，最大线程数：核心数
         // 使用有界队列(100)防止积压过多任务导致OOM
-        // CallerRunsPolicy：队列满时由主线程执行，实现自动背压(Backpressure)
+        // CallerRunsPolicy：队列满时由主线程执行，实现自动背压
         this.loaderExecutor = new ThreadPoolExecutor(
-                cores, cores * 2,
+                cores, cores*2,
                 60L, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(100),
                 new ThreadFactory() {
@@ -81,8 +81,7 @@ public class DataLoadService implements DisposableBean {
      * 加载数据的主入口
      */
     public void loadAllFeaturesIntoCache(int shardIndex, int totalShards) {
-        log.info("Starting Parallel Data Load for shard {}/{} [Threads: {}]...",
-                shardIndex, totalShards, loaderExecutor.getCorePoolSize());
+        log.info("开始为分片 {}/{} 并行加载数据 [线程数: {}]...", shardIndex, totalShards, loaderExecutor.getCorePoolSize());
         long startTime = System.currentTimeMillis();
 
         AtomicLong totalPersonsLoaded = new AtomicLong(0);
@@ -93,7 +92,7 @@ public class DataLoadService implements DisposableBean {
         Phaser phaser = new Phaser(1);
 
         try {
-            // MyBatis 流式查询处理
+            // MyBatis流式查询处理
             ResultHandler<PsnTmpl> handler = resultContext -> {
                 PsnTmpl psn = resultContext.getResultObject();
                 if (psn == null || psn.getPsnTmplNo() == null) return;
@@ -118,16 +117,15 @@ public class DataLoadService implements DisposableBean {
             }
 
             // 3. 等待所有异步任务完成
-            log.info("Database scan finished. Waiting for worker threads to complete...");
+            log.info("数据库扫描完成，等待工作线程完成...");
             phaser.arriveAndAwaitAdvance();
 
             long duration = (System.currentTimeMillis() - startTime) / 1000;
-            log.info("Shard {} load FINISHED. Total persons loaded: {}. Time elapsed: {}s",
-                    shardIndex, totalPersonsLoaded.get(), duration);
+            log.info("分片 {} 加载完成。加载总人数: {}。耗时: {}秒", shardIndex, totalPersonsLoaded.get(), duration);
 
         } catch (Exception e) {
-            log.error("Fatal error loading shard " + shardIndex, e);
-            throw new RuntimeException("Feature loading failed", e);
+            log.error("加载分片 " + shardIndex + " 时发生严重错误", e);
+            throw new RuntimeException("特征加载失败", e);
         }
     }
 
@@ -142,7 +140,7 @@ public class DataLoadService implements DisposableBean {
             try {
                 processBatch(batchIds, shardIndex, totalCounter);
             } catch (Exception e) {
-                log.error("Error processing batch of size {}", batchIds.size(), e);
+                log.error("处理大小为 {} 的批次时出错", batchIds.size(), e);
             } finally {
                 // 任务完成，注销
                 phaser.arriveAndDeregister();
@@ -158,16 +156,18 @@ public class DataLoadService implements DisposableBean {
 
         // 1. 批量获取组信息 (数据库IO)
         List<GrpPsn> groups = grpPsnMapper.selectByPsnIds(psnIds);
-        Map<String, Set<String>> psnToGroups = new HashMap<>();
+        Map<String, Set<String>> psnToGroups = new HashMap<>((int)(psnIds.size() / 0.75) + 1);
         for (GrpPsn g : groups) {
             if (g.getGrpId() != null) {
                 psnToGroups.computeIfAbsent(g.getPsnTmplNo(), k -> new HashSet<>()).add(g.getGrpId());
             }
         }
+        groups.clear();
+        groups = null;
 
         // 2. 批量获取特征 (数据库IO)
         List<FaceFtur> features = faceFturMapper.selectByPsnIds(psnIds);
-        Map<String, List<CachedFaceFeature>> psnToFeatures = new HashMap<>();
+        Map<String, List<CachedFaceFeature>> psnToFeatures = new HashMap<>((int)(psnIds.size() / 0.75) + 1);
 
         // 3. 特征转换与预计算 (CPU密集型 - 这一步并行化收益最大)
         for (FaceFtur f : features) {
@@ -195,13 +195,16 @@ public class DataLoadService implements DisposableBean {
 
                     psnToFeatures.computeIfAbsent(f.getPsnTmplNo(), k -> new ArrayList<>()).add(cachedFeature);
                 } catch (Exception e) {
-                    log.warn("Feature conversion failed for face: {}", f.getFaceBosgId());
+                    log.warn("人脸特征转换失败: {}", f.getFaceBosgId());
                 }
             }
         }
+        // 及时释放特征列表内存
+        features.clear();
+        features = null;
 
         // 4. 构建最终缓存对象
-        List<PersonFaceData> personDataList = new ArrayList<>(psnIds.size());
+        List<PersonFaceData> personDataList = new ArrayList<>((int)(psnIds.size() / 0.75) + 1);
         for (String psnId : psnIds) {
             List<CachedFaceFeature> featList = psnToFeatures.get(psnId);
             if (featList == null || featList.isEmpty()) {
@@ -234,15 +237,23 @@ public class DataLoadService implements DisposableBean {
 
             long currentTotal = totalCounter.addAndGet(personDataList.size());
             if (currentTotal % LOG_INTERVAL < BATCH_SIZE) {
-                log.info("Shard {}: Loaded {} persons...", shardIndex, currentTotal);
+                log.info("分片 {}: 已加载 {} 人...", shardIndex, currentTotal);
             }
+
+            // 清理临时数据结构释放内存
+            personDataList.clear();
+            psnToFeatures.clear();
+            psnToGroups.clear();
+            personDataList = null;
+            psnToFeatures = null;
+            psnToGroups = null;
         }
     }
 
     @Override
     public void destroy() {
         if (loaderExecutor != null) {
-            log.info("Shutting down data loader thread pool...");
+            log.info("正在关闭数据加载线程池...");
             loaderExecutor.shutdown();
         }
     }

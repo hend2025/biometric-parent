@@ -29,17 +29,17 @@ public class FaceRecogService {
 
     public List<CompareResult> recogOneToMany(CompareParams params) {
         if (params == null) {
-            throw new IllegalArgumentException("RecogParam cannot be null");
+            throw new IllegalArgumentException("识别参数不能为空");
         }
         if ((params.getFeatures() == null || CollectionUtils.isEmpty(params.getFeatures())) &&
             (params.getImages() == null || CollectionUtils.isEmpty(params.getImages())) ) {
-            throw new IllegalArgumentException("Features cannot be null");
+            throw new IllegalArgumentException("特征数据不能为空");
         }
         if (params.getThreshold() < 0 || params.getThreshold() > 1) {
-            throw new IllegalArgumentException("Threshold must be between 0 and 1, got: " + params.getThreshold());
+            throw new IllegalArgumentException("阈值必须在 0 和 1 之间，当前值: " + params.getThreshold());
         }
         if (params.getTopN() < 1 || params.getTopN() > 100) {
-            throw new IllegalArgumentException("topN must be between 1 and 100, got: " + params.getTopN());
+            throw new IllegalArgumentException("topN 必须在 1 和 100 之间，当前值: " + params.getTopN());
         }
 
         List<CompareResult> result = null;

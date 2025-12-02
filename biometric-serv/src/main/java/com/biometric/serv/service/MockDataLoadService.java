@@ -27,7 +27,7 @@ public class MockDataLoadService {
 
     private static final int DEFAULT_TOTAL_PERSONS = 10_000_000;
     private static final int DEFAULT_TOTAL_GROUPS = 20_000;
-    private static final int BATCH_SIZE = 5000;
+    private static final int BATCH_SIZE = 500; // 降低批次大小以减少内存压力
 
     // --- 核心优化：特征资源池 ---
     // 预生成 1000 组标准特征，所有模拟人员复用这些数组引用
@@ -94,8 +94,8 @@ public class MockDataLoadService {
 
         totalPersonsTarget = (totalPersons != null && totalPersons > 0) ? totalPersons : DEFAULT_TOTAL_PERSONS;
         totalGroupsTarget = (totalGroups != null && totalGroups > 0) ? totalGroups : DEFAULT_TOTAL_GROUPS;
-        // 建议线程数 = CPU核心数 * 2，以跑满网络IO
-        int threads = (threadCount != null && threadCount > 0) ? threadCount : Runtime.getRuntime().availableProcessors() * 2;
+        // 降低线程数以减少内存压力和并发竞争
+        int threads = (threadCount != null && threadCount > 0) ? threadCount : Math.min(Runtime.getRuntime().availableProcessors(), 4);
 
         generatedPersons.set(0);
         loadedPersons.set(0);
@@ -216,7 +216,11 @@ public class MockDataLoadService {
             // 降低日志频率，每 50万 条打印一次，减少IO影响
             if (total % 500_000 < BATCH_SIZE) {
                 long elapsed = (System.currentTimeMillis() - startTime) / 1000 + 1;
-                log.info("已加载: {} ({} 人/秒) [线程{}]", total, total / elapsed, threadIndex);
+                Runtime runtime = Runtime.getRuntime();
+                long usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024);
+                long maxMemory = runtime.maxMemory() / (1024 * 1024);
+                log.info("已加载: {} ({} 人/秒) [线程{}] [内存: {}MB/{}MB]", 
+                    total, total / elapsed, threadIndex, usedMemory, maxMemory);
             }
         } catch (Exception e) {
             log.error("写入失败", e);

@@ -10,8 +10,8 @@
             GRP_ID, PSN_TMPL_NO
         FROM
             bosg_cpr_grp_psn_b
-        WHERE
-            MOD(CRC32(PSN_TMPL_NO), #{totalShards}) = #{shardIndex}
+        WHERE VALI_FLAG = '1'
+           AND MOD(CRC32(PSN_TMPL_NO), #{totalShards}) = #{shardIndex}
     </select>
 
 </mapper>

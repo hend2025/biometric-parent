@@ -101,11 +101,10 @@ public class AlgoSocketClient {
 
     private void validateResult(SocketResponse<?> result, String funId) {
         if (result == null) {
-            throw new AlgoProcessException(-1, "算法引擎返回空响应 (可能是网络连接中断)");
+            throw new AlgoProcessException(-1,"算法引擎返回空响应（可能是网络连接中断）");
         }
         if (result.getReturnId() != 0) {
             log.warn("算法业务返回错误 [FunID={}]: code={}, desc={}", funId, result.getReturnId(), result.getReturnDesc());
         }
     }
-
 }

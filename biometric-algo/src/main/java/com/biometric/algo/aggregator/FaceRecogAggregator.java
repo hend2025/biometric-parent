@@ -33,7 +33,7 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
         this.localTopNHeap = new PriorityQueue<>(params.getTopN(), new CompareResultScoreComparator());
     }
 
-    // 初始化输入特征 (Search Query Features)
+    // 初始化输入特征（搜索查询特征）
     private void initInputFeatures() {
         if (inputFloatFeatures != null) return;
 
@@ -88,7 +88,7 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
         float maxPersonScore = -1.0f;
         String maxPersonFaceId = null;
 
-        // 用于收集通过阈值的详细匹配结果 (Lazy creation)
+        // 用于收集通过阈值的详细匹配结果（懒初始化）
         List<CompareResult.compareDetails> matchedDetails = null;
 
         int inputSize = inputBinaryFeatures.size();
