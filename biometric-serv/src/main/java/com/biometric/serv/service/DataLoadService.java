@@ -79,6 +79,39 @@ public class DataLoadService implements DisposableBean {
 
     /**
      * 加载数据的主入口
+     * 
+     * <p><b>内存占用计算（1000万人员，每人5组，2张模板）：</b></p>
+     * <pre>
+     * 1. CachedFaceFeature对象（每张模板）：
+     *    - faceId (String ~32字符)               : ~104 字节
+     *    - featureData (byte[512])               : 512 + 16(对象头) = 528 字节
+     *    - templateType (String ~8字符)          : ~32 字节
+     *    - algoType (String ~16字符)             : ~48 字节
+     *    - binaryFeature (int[4])                : 16 + 16(对象头) = 32 字节
+     *    - featureVector (float[128])            : 512 + 16(对象头) = 528 字节
+     *    - 对象头                                 : 16 字节
+     *    小计：1,288 字节 ≈ 1.26 KB/模板
+     * 
+     * 2. PersonFaceData对象（每人）：
+     *    - personId (String ~32字符)             : ~104 字节
+     *    - groupIds (String[5])                  : 5组×48 + 16(对象头) = 256 字节
+     *    - features (ArrayList容器)              : 40 + 16(内部数组) = 56 字节
+     *    - 对象头                                 : 16 字节
+     *    小计：432 字节
+     * 
+     * 3. 每人总内存：
+     *    = 432 (PersonFaceData基础) + 2 × 1,288 (2个模板)
+     *    = 3,008 字节 ≈ 2.94 KB/人
+     * 
+     * 4. 1000万人总内存：
+     *    = 10,000,000 × 3,008 = 30,080,000,000 字节
+     *    = 30.08 GB (纯数据)
+     *    ≈ 36.1 GB (考虑对象对齐+HashMap开销 ×1.2)
+     * 
+     * 建议：
+     * - JVM堆内存：-Xmx48g -Xms48g（预留12GB缓冲）
+     * - G1GC推荐配置：-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=32m
+     * </pre>
      */
     public void loadAllFeaturesIntoCache(int shardIndex, int totalShards) {
         log.info("开始为分片 {}/{} 并行加载数据 [线程数: {}]...", shardIndex, totalShards, loaderExecutor.getCorePoolSize());
@@ -239,15 +272,17 @@ public class DataLoadService implements DisposableBean {
             if (currentTotal % LOG_INTERVAL < BATCH_SIZE) {
                 log.info("分片 {}: 已加载 {} 人...", shardIndex, currentTotal);
             }
-
-            // 清理临时数据结构释放内存
-            personDataList.clear();
-            psnToFeatures.clear();
-            psnToGroups.clear();
-            personDataList = null;
-            psnToFeatures = null;
-            psnToGroups = null;
         }
+
+        
+        // 清理临时数据结构释放内存
+        personDataList.clear();
+        psnToFeatures.clear();
+        psnToGroups.clear();
+        personDataList = null;
+        psnToFeatures = null;
+        psnToGroups = null;
+
     }
 
     @Override

@@ -25,7 +25,7 @@ public class FaceCacheService {
     private final Semaphore writeSemaphore = new Semaphore(MAX_CONCURRENT_WRITES);
     
     // 内存压力阈值（堆使用率超过此值时暂停写入）
-    private static final double MEMORY_PRESSURE_THRESHOLD = 0.85;
+    private static final double MEMORY_PRESSURE_THRESHOLD = 0.65;
     private static final long MEMORY_CHECK_INTERVAL_MS = 500;
     private final IMap<String, PersonFaceData> faceFeatureMap;
 
