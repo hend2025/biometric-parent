@@ -206,11 +206,16 @@ public class DataLoadService implements DisposableBean {
     private void submitBatchTask(List<String> batchIds, int shardIndex, AtomicLong totalCounter, Phaser phaser) {
         // 内存压力检测：如果内存使用过高，暂停提交新任务
         MemoryStats stats = configOptimizer.getCurrentMemoryStats();
-        if (stats.usagePercent > 75) {
-            log.warn("内存使用率过高: {}%，建议暂缓数据加载", String.format("%.2f", stats.usagePercent));
-        }else if (stats.usagePercent > 85) {
+        if (stats.usagePercent > 90) {
             log.error("内存使用率严重过高: {}%，执行 GC...", String.format("%.2f", stats.usagePercent));
             System.gc();
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }else if (stats.usagePercent > 85) {
+            log.warn("内存使用率过高: {}%，建议暂缓数据加载", String.format("%.2f", stats.usagePercent));
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
@@ -218,7 +223,7 @@ public class DataLoadService implements DisposableBean {
             }
         }
 
-        // 注册一个新的任务
+            // 注册一个新的任务
         phaser.register();
 
         CompletableFuture.runAsync(() -> {
