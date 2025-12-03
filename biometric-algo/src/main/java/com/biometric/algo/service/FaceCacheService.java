@@ -88,28 +88,28 @@ public class FaceCacheService {
      * 当堆使用率超过阈值时，暂停并让出CPU，让GC有机会运行
      */
     private void waitForMemoryAvailable() {
-        Runtime runtime = Runtime.getRuntime();
-        long maxMemory = runtime.maxMemory();
-        
-        while (true) {
-            long usedMemory = runtime.totalMemory() - runtime.freeMemory();
-            double usageRatio = (double) usedMemory / maxMemory;
-            
-            if (usageRatio < MEMORY_PRESSURE_THRESHOLD) {
-                break;
-            }
-            
-            // 内存压力过大，让出CPU让GC运行（避免显式调用System.gc()）
-            log.warn("内存压力过大 ({}%)，暂停写入等待内存释放...", String.format("%.1f", usageRatio * 100));
-            System.gc();
-
-            try {
-                Thread.sleep(MEMORY_CHECK_INTERVAL_MS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
+//        Runtime runtime = Runtime.getRuntime();
+//        long maxMemory = runtime.maxMemory();
+//
+//        while (true) {
+//            long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+//            double usageRatio = (double) usedMemory / maxMemory;
+//
+//            if (usageRatio < MEMORY_PRESSURE_THRESHOLD) {
+//                break;
+//            }
+//
+//            // 内存压力过大，让出CPU让GC运行（避免显式调用System.gc()）
+//            log.warn("内存压力过大 ({}%)，暂停写入等待内存释放...", String.format("%.1f", usageRatio * 100));
+//            System.gc();
+//
+//            try {
+//                Thread.sleep(MEMORY_CHECK_INTERVAL_MS);
+//            } catch (InterruptedException e) {
+//                Thread.currentThread().interrupt();
+//                break;
+//            }
+//        }
     }
 
     public void clearCache() {

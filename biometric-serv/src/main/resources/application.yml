@@ -33,6 +33,21 @@ biometric:
       allPerson: false
       timeout-seconds: 30
 
+  # 服务器配置优化参数 (可选，不配置则自动计算)
+  server-optimizer:
+    # 核心线程数 (不设置则根据CPU核心数自动计算)
+#    core-threads: 8
+    # 最大线程数 (不设置则根据CPU核心数自动计算)
+#    max-threads: 16
+    # 批处理大小 (不设置则根据内存大小自动计算)
+#    batch-size: 1000
+    # 队列大小 (不设置则根据内存大小自动计算)
+#    queue-size: 100
+    # 数据库拉取大小 (不设置则根据批处理大小自动计算)
+#    db-fetch-size: 1000
+    # 日志间隔 (不设置则根据批处理大小自动计算)
+#    log-interval: 50000
+
   recognition:
     threshold: 0.6
     top-n: 3

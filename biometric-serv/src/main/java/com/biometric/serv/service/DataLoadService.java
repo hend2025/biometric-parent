@@ -10,6 +10,9 @@ import com.biometric.serv.entity.PsnTmpl;
 import com.biometric.serv.mapper.FaceFturMapper;
 import com.biometric.serv.mapper.GrpPsnMapper;
 import com.biometric.serv.mapper.PsnTmplMapper;
+import com.biometric.serv.config.ServerConfigOptimizer;
+import com.biometric.serv.config.ServerConfigOptimizer.LoaderConfig;
+import com.biometric.serv.config.ServerConfigOptimizer.MemoryStats;
 import org.apache.ibatis.session.ResultHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,9 +33,12 @@ public class DataLoadService implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(DataLoadService.class);
 
-    private static final int BATCH_SIZE = 1000;
-    private static final int LOG_INTERVAL = 50000;
     private static final String DEFAULT_GROUP_ID = "DEFAULT_GROUP";
+
+    // 动态配置参数（根据服务器配置自动调整）
+    private final int BATCH_SIZE;
+    private final int LOG_INTERVAL;
+    private final ServerConfigOptimizer configOptimizer;
 
     @Value("${biometric.face-loader.minFeat:true}")
     private boolean minFeat;
@@ -55,17 +61,26 @@ public class DataLoadService implements DisposableBean {
     // --- 线程池配置 ---
     private final ThreadPoolExecutor loaderExecutor;
 
-    public DataLoadService() {
-        int cores = Runtime.getRuntime().availableProcessors();
-        // 核心线程数：减半避免过多并发，最大线程数：核心数
-        // 使用有界队列(100)防止积压过多任务导致OOM
+    @Autowired
+    public DataLoadService(ServerConfigOptimizer configOptimizer) {
+        // 使用注入的服务器配置优化器
+        this.configOptimizer = configOptimizer;
+        LoaderConfig config = configOptimizer.getLoaderConfig();
+
+        // 使用优化后的配置参数
+        this.BATCH_SIZE = config.batchSize;
+        this.LOG_INTERVAL = config.logInterval;
+
+        // 使用优化后的线程池配置
         // CallerRunsPolicy：队列满时由主线程执行，实现自动背压
         this.loaderExecutor = new ThreadPoolExecutor(
-                cores, cores*2,
+                config.coreThreads,
+                config.maxThreads,
                 60L, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(100),
+                new ArrayBlockingQueue<>(config.queueSize),
                 new ThreadFactory() {
                     private final AtomicLong count = new AtomicLong(0);
+
                     @Override
                     public Thread newThread(Runnable r) {
                         Thread t = new Thread(r, "FaceLoader-" + count.getAndIncrement());
@@ -75,6 +90,8 @@ public class DataLoadService implements DisposableBean {
                 },
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );
+
+        log.info("数据加载器初始化完成 ");
     }
 
     /**
@@ -114,8 +131,16 @@ public class DataLoadService implements DisposableBean {
      * </pre>
      */
     public void loadAllFeaturesIntoCache(int shardIndex, int totalShards) {
-        log.info("开始为分片 {}/{} 并行加载数据 [线程数: {}]...", shardIndex, totalShards, loaderExecutor.getCorePoolSize());
+        LoaderConfig config = configOptimizer.getLoaderConfig();
+        log.info("开始为分片 {}/{} 并行加载数据 [ 核心线程: {}, 批处理: {}]...",
+                shardIndex, totalShards, config.coreThreads, BATCH_SIZE);
+
+        // 记录初始内存状态
+        MemoryStats initialMemory = configOptimizer.getCurrentMemoryStats();
+        log.info("加载前内存状态: {}", initialMemory);
+
         long startTime = System.currentTimeMillis();
+        AtomicLong processedBatches = new AtomicLong(0);
 
         AtomicLong totalPersonsLoaded = new AtomicLong(0);
         List<String> psnIdBatch = new ArrayList<>(BATCH_SIZE);
@@ -153,11 +178,24 @@ public class DataLoadService implements DisposableBean {
             log.info("数据库扫描完成，等待工作线程完成...");
             phaser.arriveAndAwaitAdvance();
 
+            // 输出性能统计
             long duration = (System.currentTimeMillis() - startTime) / 1000;
-            log.info("分片 {} 加载完成。加载总人数: {}。耗时: {}秒", shardIndex, totalPersonsLoaded.get(), duration);
+            long totalPersons = totalPersonsLoaded.get();
+            double throughput = duration > 0 ? (totalPersons / (double)duration) : 0;
+
+            MemoryStats finalMemory = configOptimizer.getCurrentMemoryStats();
+
+            log.info("========================================");
+            log.info("分片 {} 加载完成！", shardIndex);
+            log.info("  加载总人数: {}", totalPersons);
+            log.info("  总耗时: {} 秒", duration);
+            log.info("  吞吐量: {} 人/秒", String.format("%.2f", throughput));
+            log.info("  处理批次数: {}", processedBatches.get());
+            log.info("  加载后内存: {}", finalMemory);
+            log.info("========================================");
 
         } catch (Exception e) {
-            log.error("加载分片 " + shardIndex + " 时发生严重错误", e);
+            log.error("加载分片 {} 时发生严重错误", shardIndex, e);
             throw new RuntimeException("特征加载失败", e);
         }
     }
@@ -166,6 +204,16 @@ public class DataLoadService implements DisposableBean {
      * 提交批次处理任务到线程池
      */
     private void submitBatchTask(List<String> batchIds, int shardIndex, AtomicLong totalCounter, Phaser phaser) {
+        // 内存压力检测：如果内存使用过高，暂停提交新任务
+        if (configOptimizer.shouldThrottle()) {
+            try {
+                log.warn("内存压力过高，暂停 500ms...");
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
         // 注册一个新的任务
         phaser.register();
 
@@ -270,11 +318,11 @@ public class DataLoadService implements DisposableBean {
 
             long currentTotal = totalCounter.addAndGet(personDataList.size());
             if (currentTotal % LOG_INTERVAL < BATCH_SIZE) {
-                log.info("分片 {}: 已加载 {} 人...", shardIndex, currentTotal);
+                MemoryStats currentMemory = configOptimizer.getCurrentMemoryStats();
+                log.info("分片 {}: 已加载 {} 人... [{}]", shardIndex, currentTotal, currentMemory);
             }
         }
 
-        
         // 清理临时数据结构释放内存
         personDataList.clear();
         psnToFeatures.clear();
