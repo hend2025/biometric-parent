@@ -127,6 +127,14 @@ public class DataLoadService implements DisposableBean {
 
     private void submitBatchTask(List<String> batchIds, int shardIndex, AtomicLong totalCounter, Phaser phaser) {
         try {
+
+            // 内存压力检测：如果内存使用过高，暂停提交新任务
+            ServerConfigOptimizer.MemoryStats stats = configOptimizer.getCurrentMemoryStats();
+            if (stats.usagePercent > 85) {
+                log.error("内存使用率严重过高: [{}]，暂停加载数据到缓存!!!", stats);
+                return;
+            }
+
             // 获取许可，如果处理过慢会阻塞主线程，从而降低数据库读取速度
             memoryBackpressure.acquire();
             phaser.register();
