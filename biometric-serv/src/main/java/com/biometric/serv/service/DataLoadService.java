@@ -205,10 +205,14 @@ public class DataLoadService implements DisposableBean {
      */
     private void submitBatchTask(List<String> batchIds, int shardIndex, AtomicLong totalCounter, Phaser phaser) {
         // 内存压力检测：如果内存使用过高，暂停提交新任务
-        if (configOptimizer.shouldThrottle()) {
+        MemoryStats stats = configOptimizer.getCurrentMemoryStats();
+        if (stats.usagePercent > 75) {
+            log.warn("内存使用率过高: {}%，建议暂缓数据加载", String.format("%.2f", stats.usagePercent));
+        }else if (stats.usagePercent > 85) {
+            log.error("内存使用率严重过高: {}%，执行 GC...", String.format("%.2f", stats.usagePercent));
+            System.gc();
             try {
-                log.warn("内存压力过高，暂停 500ms...");
-                Thread.sleep(500);
+                Thread.sleep(1000);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }

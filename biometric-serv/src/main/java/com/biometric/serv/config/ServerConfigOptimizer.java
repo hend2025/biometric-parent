@@ -140,29 +140,7 @@ public class ServerConfigOptimizer {
         
         return stats;
     }
-    
-    /**
-     * 检查内存压力，返回是否应该暂停加载
-     */
-    public boolean shouldThrottle() {
-        MemoryStats stats = getCurrentMemoryStats();
-        
-        // 如果内存使用超过80%，建议减速
-        if (stats.usagePercent > 80) {
-            log.warn("内存使用率过高: {:.2f}%，建议暂缓数据加载", stats.usagePercent);
-            return true;
-        }
-        
-        // 如果内存使用超过85%，强制GC
-        if (stats.usagePercent > 85) {
-            log.error("内存使用率严重过高: {:.2f}%，执行 GC...", stats.usagePercent);
-            System.gc();
-            return true;
-        }
-        
-        return false;
-    }
-    
+
     public LoaderConfig getLoaderConfig() {
         return loaderConfig;
     }
@@ -190,8 +168,7 @@ public class ServerConfigOptimizer {
         
         @Override
         public String toString() {
-            return String.format("内存使用: %d MB / %d MB (%.2f%%)", 
-                usedMemoryMB, maxMemoryMB, usagePercent);
+            return String.format("内存使用: %d MB / %d MB (%.2f%%)", usedMemoryMB, maxMemoryMB, usagePercent);
         }
     }
     
