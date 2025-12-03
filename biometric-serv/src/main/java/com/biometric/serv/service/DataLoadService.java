@@ -4,18 +4,16 @@ import com.biometric.algo.dto.CachedFaceFeature;
 import com.biometric.algo.dto.PersonFaceData;
 import com.biometric.algo.service.FaceCacheService;
 import com.biometric.algo.util.Face303JavaCalcuater;
+import com.biometric.serv.config.ServerConfigOptimizer;
+import com.biometric.serv.config.ServerConfigOptimizer.LoaderConfig;
 import com.biometric.serv.entity.FaceFtur;
 import com.biometric.serv.entity.GrpPsn;
 import com.biometric.serv.entity.PsnTmpl;
 import com.biometric.serv.mapper.FaceFturMapper;
 import com.biometric.serv.mapper.GrpPsnMapper;
 import com.biometric.serv.mapper.PsnTmplMapper;
-import com.biometric.serv.config.ServerConfigOptimizer;
-import com.biometric.serv.config.ServerConfigOptimizer.LoaderConfig;
-import com.biometric.serv.config.ServerConfigOptimizer.MemoryStats;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.session.ResultHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,19 +24,14 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 优化后的数据加载服务
+ * 数据加载服务，引入信号量实现内存保护
  */
+@Slf4j
 @Service
 public class DataLoadService implements DisposableBean {
 
-    private static final Logger log = LoggerFactory.getLogger(DataLoadService.class);
-
-    private static final String DEFAULT_GROUP_ID = "DEFAULT_GROUP";
-
-    // 动态配置参数（根据服务器配置自动调整）
     private final int BATCH_SIZE;
     private final int LOG_INTERVAL;
-    private final ServerConfigOptimizer configOptimizer;
 
     @Value("${biometric.face-loader.minFeat:true}")
     private boolean minFeat;
@@ -58,21 +51,23 @@ public class DataLoadService implements DisposableBean {
     @Autowired
     private FaceCacheService faceCacheService;
 
-    // --- 线程池配置 ---
+    private final ServerConfigOptimizer configOptimizer;
+
     private final ThreadPoolExecutor loaderExecutor;
+    // 使用信号量控制最大并行批次，防止内存溢出。假设每个批次占用 10MB，允许 100 个批次并行约 1GB
+    private final Semaphore memoryBackpressure;
 
     @Autowired
     public DataLoadService(ServerConfigOptimizer configOptimizer) {
-        // 使用注入的服务器配置优化器
-        this.configOptimizer = configOptimizer;
         LoaderConfig config = configOptimizer.getLoaderConfig();
-
-        // 使用优化后的配置参数
+        this.configOptimizer = configOptimizer;
         this.BATCH_SIZE = config.batchSize;
         this.LOG_INTERVAL = config.logInterval;
 
-        // 使用优化后的线程池配置
-        // CallerRunsPolicy：队列满时由主线程执行，实现自动背压
+        // 根据队列大小和线程数设置信号量
+        int maxInFlightBatches = config.queueSize + config.maxThreads;
+        this.memoryBackpressure = new Semaphore(maxInFlightBatches);
+
         this.loaderExecutor = new ThreadPoolExecutor(
                 config.coreThreads,
                 config.maxThreads,
@@ -80,7 +75,6 @@ public class DataLoadService implements DisposableBean {
                 new ArrayBlockingQueue<>(config.queueSize),
                 new ThreadFactory() {
                     private final AtomicLong count = new AtomicLong(0);
-
                     @Override
                     public Thread newThread(Runnable r) {
                         Thread t = new Thread(r, "FaceLoader-" + count.getAndIncrement());
@@ -88,265 +82,141 @@ public class DataLoadService implements DisposableBean {
                         return t;
                     }
                 },
+                // 队列满时由调用者运行，实现天然的背压
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );
-
-        log.info("数据加载器初始化完成 ");
     }
 
-    /**
-     * 加载数据的主入口
-     * 
-     * <p><b>内存占用计算（1000万人员，每人5组，2张模板）：</b></p>
-     * <pre>
-     * 1. CachedFaceFeature对象（每张模板）：
-     *    - faceId (String ~32字符)               : ~104 字节
-     *    - featureData (byte[512])               : 512 + 16(对象头) = 528 字节
-     *    - templateType (String ~8字符)          : ~32 字节
-     *    - algoType (String ~16字符)             : ~48 字节
-     *    - binaryFeature (int[4])                : 16 + 16(对象头) = 32 字节
-     *    - featureVector (float[128])            : 512 + 16(对象头) = 528 字节
-     *    - 对象头                                 : 16 字节
-     *    小计：1,288 字节 ≈ 1.26 KB/模板
-     * 
-     * 2. PersonFaceData对象（每人）：
-     *    - personId (String ~32字符)             : ~104 字节
-     *    - groupIds (String[5])                  : 5组×48 + 16(对象头) = 256 字节
-     *    - features (ArrayList容器)              : 40 + 16(内部数组) = 56 字节
-     *    - 对象头                                 : 16 字节
-     *    小计：432 字节
-     * 
-     * 3. 每人总内存：
-     *    = 432 (PersonFaceData基础) + 2 × 1,288 (2个模板)
-     *    = 3,008 字节 ≈ 2.94 KB/人
-     * 
-     * 4. 1000万人总内存：
-     *    = 10,000,000 × 3,008 = 30,080,000,000 字节
-     *    = 30.08 GB (纯数据)
-     *    ≈ 36.1 GB (考虑对象对齐+HashMap开销 ×1.2)
-     * 
-     * 建议：
-     * - JVM堆内存：-Xmx48g -Xms48g（预留12GB缓冲）
-     * - G1GC推荐配置：-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=32m
-     * </pre>
-     */
     public void loadAllFeaturesIntoCache(int shardIndex, int totalShards) {
-        LoaderConfig config = configOptimizer.getLoaderConfig();
-        log.info("开始为分片 {}/{} 并行加载数据 [ 核心线程: {}, 批处理: {}]...",
-                shardIndex, totalShards, config.coreThreads, BATCH_SIZE);
-
-        // 记录初始内存状态
-        MemoryStats initialMemory = configOptimizer.getCurrentMemoryStats();
-        log.info("加载前内存状态: {}", initialMemory);
-
+        log.info("开始分片 {}/{} 数据加载，批次大小: {}", shardIndex, totalShards, BATCH_SIZE);
         long startTime = System.currentTimeMillis();
-        AtomicLong processedBatches = new AtomicLong(0);
-
         AtomicLong totalPersonsLoaded = new AtomicLong(0);
         List<String> psnIdBatch = new ArrayList<>(BATCH_SIZE);
-
-        // Phaser用于同步，确保所有异步任务执行完毕
-        // 注册1个party代表主线程
         Phaser phaser = new Phaser(1);
 
         try {
-            // MyBatis流式查询处理
             ResultHandler<PsnTmpl> handler = resultContext -> {
                 PsnTmpl psn = resultContext.getResultObject();
-                if (psn == null || psn.getPsnTmplNo() == null) return;
-
-                psnIdBatch.add(psn.getPsnTmplNo());
-
-                if (psnIdBatch.size() >= BATCH_SIZE) {
-                    // 提交一批任务
-                    submitBatchTask(new ArrayList<>(psnIdBatch), shardIndex, totalPersonsLoaded, phaser);
-                    psnIdBatch.clear();
+                if (psn != null && psn.getPsnTmplNo() != null) {
+                    psnIdBatch.add(psn.getPsnTmplNo());
+                    if (psnIdBatch.size() >= BATCH_SIZE) {
+                        // 提交任务，这里会阻塞直到有信号量许可
+                        submitBatchTask(new ArrayList<>(psnIdBatch), shardIndex, totalPersonsLoaded, phaser);
+                        psnIdBatch.clear();
+                    }
                 }
             };
 
-            // 1. 开始流式扫描数据库 (生产者)
-            // 注意：Mapper XML中应配置 fetchSize="-2147483648" 以启用MySQL流式读取
             psnTmplMapper.streamScanPsnTmpls(shardIndex, totalShards, handler);
 
-            // 2. 处理剩余的最后一批
             if (!psnIdBatch.isEmpty()) {
                 submitBatchTask(new ArrayList<>(psnIdBatch), shardIndex, totalPersonsLoaded, phaser);
-                psnIdBatch.clear();
             }
 
-            // 3. 等待所有异步任务完成
-            log.info("数据库扫描完成，等待工作线程完成...");
+            // 等待所有任务完成
             phaser.arriveAndAwaitAdvance();
 
-            // 输出性能统计
             long duration = (System.currentTimeMillis() - startTime) / 1000;
-            long totalPersons = totalPersonsLoaded.get();
-            double throughput = duration > 0 ? (totalPersons / (double)duration) : 0;
-
-            MemoryStats finalMemory = configOptimizer.getCurrentMemoryStats();
-
-            log.info("========================================");
-            log.info("分片 {} 加载完成！", shardIndex);
-            log.info("  加载总人数: {}", totalPersons);
-            log.info("  总耗时: {} 秒", duration);
-            log.info("  吞吐量: {} 人/秒", String.format("%.2f", throughput));
-            log.info("  处理批次数: {}", processedBatches.get());
-            log.info("  加载后内存: {}", finalMemory);
-            log.info("========================================");
+            log.info("分片 {} 加载完成！总人数: {}, 耗时: {}s", shardIndex, totalPersonsLoaded.get(), duration);
 
         } catch (Exception e) {
-            log.error("加载分片 {} 时发生严重错误", shardIndex, e);
-            throw new RuntimeException("特征加载失败", e);
+            log.error("加载异常", e);
+            throw new RuntimeException("加载失败", e);
         }
     }
 
-    /**
-     * 提交批次处理任务到线程池
-     */
     private void submitBatchTask(List<String> batchIds, int shardIndex, AtomicLong totalCounter, Phaser phaser) {
-        // 内存压力检测：如果内存使用过高，暂停提交新任务
-        MemoryStats stats = configOptimizer.getCurrentMemoryStats();
-        if (stats.usagePercent > 90) {
-            log.error("内存使用率严重过高: {}%，执行 GC...", String.format("%.2f", stats.usagePercent));
-            System.gc();
-            try {
-                Thread.sleep(3000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }else if (stats.usagePercent > 85) {
-            log.warn("内存使用率过高: {}%，建议暂缓数据加载", String.format("%.2f", stats.usagePercent));
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+        try {
+            // 获取许可，如果处理过慢会阻塞主线程，从而降低数据库读取速度
+            memoryBackpressure.acquire();
+            phaser.register();
+
+            CompletableFuture.runAsync(() -> {
+                try {
+                    processBatch(batchIds, shardIndex, totalCounter);
+                } finally {
+                    memoryBackpressure.release();
+                    phaser.arriveAndDeregister();
+                }
+            }, loaderExecutor);
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("加载被中断", e);
         }
-
-            // 注册一个新的任务
-        phaser.register();
-
-        CompletableFuture.runAsync(() -> {
-            try {
-                processBatch(batchIds, shardIndex, totalCounter);
-            } catch (Exception e) {
-                log.error("处理大小为 {} 的批次时出错", batchIds.size(), e);
-            } finally {
-                // 任务完成，注销
-                phaser.arriveAndDeregister();
-            }
-        }, loaderExecutor);
     }
 
-    /**
-     * 具体的批次处理逻辑 (消费者逻辑)
-     */
     private void processBatch(List<String> psnIds, int shardIndex, AtomicLong totalCounter) {
         if (psnIds.isEmpty()) return;
 
-        // 1. 批量获取组信息 (数据库IO)
-        List<GrpPsn> groups = grpPsnMapper.selectByPsnIds(psnIds);
-        Map<String, Set<String>> psnToGroups = new HashMap<>((int)(psnIds.size() / 0.75) + 1);
-        for (GrpPsn g : groups) {
-            if (g.getGrpId() != null) {
-                psnToGroups.computeIfAbsent(g.getPsnTmplNo(), k -> new HashSet<>()).add(g.getGrpId());
-            }
-        }
-        groups.clear();
-        groups = null;
-
-        // 2. 批量获取特征 (数据库IO)
-        List<FaceFtur> features = faceFturMapper.selectByPsnIds(psnIds);
-        Map<String, List<CachedFaceFeature>> psnToFeatures = new HashMap<>((int)(psnIds.size() / 0.75) + 1);
-
-        // 3. 特征转换与预计算 (CPU密集型 - 这一步并行化收益最大)
-        for (FaceFtur f : features) {
-            byte[] rawData = f.getFaceFturData();
-            if (f.getFaceBosgId() != null && rawData != null && rawData.length > 0) {
-                CachedFaceFeature cachedFeature = new CachedFaceFeature();
-                cachedFeature.setFaceId(f.getFaceBosgId());
-                cachedFeature.setTemplateType(f.getFaceCrteTmplType());
-                cachedFeature.setAlgoType(f.getAlgoVerId());
-                if(f.getAlgoVerId().toUpperCase().contains("NX")){
-                    cachedFeature.setFeatureData(rawData);
-                }
-
-                try {
-                    // 核心优化：并行计算二进制特征和浮点向量
-                    if(minFeat){
-                        int[] binaryFeat = Face303JavaCalcuater.getBinaFeat(rawData);
-                        cachedFeature.setBinaryFeature(binaryFeat);
-                    }
-
-                    if(maxFeat){
-                        float[] floatFeat = Face303JavaCalcuater.toFloatArray(rawData);
-                        cachedFeature.setFeatureVector(floatFeat);
-                    }
-
-                    psnToFeatures.computeIfAbsent(f.getPsnTmplNo(), k -> new ArrayList<>()).add(cachedFeature);
-                } catch (Exception e) {
-                    log.warn("人脸特征转换失败: {}", f.getFaceBosgId());
+        try {
+            // 1. 批量获取组 (IO)
+            List<GrpPsn> groups = grpPsnMapper.selectByPsnIds(psnIds);
+            Map<String, Set<String>> psnToGroups = new HashMap<>();
+            for (GrpPsn g : groups) {
+                if (g.getGrpId() != null) {
+                    psnToGroups.computeIfAbsent(g.getPsnTmplNo(), k -> new HashSet<>()).add(g.getGrpId());
                 }
             }
+
+            // 2. 批量获取特征 (IO)
+            List<FaceFtur> features = faceFturMapper.selectByPsnIds(psnIds);
+            Map<String, List<CachedFaceFeature>> psnToFeatures = new HashMap<>();
+
+            // 3. 特征转换 (CPU)
+            for (FaceFtur f : features) {
+                byte[] rawData = f.getFaceFturData();
+                if (f.getFaceBosgId() != null && rawData != null && rawData.length > 0) {
+                    CachedFaceFeature cf = new CachedFaceFeature();
+                    cf.setFaceId(f.getFaceBosgId());
+                    cf.setTemplateType(f.getFaceCrteTmplType());
+                    cf.setAlgoType(f.getAlgoVerId());
+                    if(f.getAlgoVerId().toUpperCase().contains("NX")) {
+                        cf.setFeatureData(rawData);
+                    }
+
+                    if (minFeat) cf.setBinaryFeature(Face303JavaCalcuater.getBinaFeat(rawData));
+                    if (maxFeat) cf.setFeatureVector(Face303JavaCalcuater.toFloatArray(rawData));
+
+                    psnToFeatures.computeIfAbsent(f.getPsnTmplNo(), k -> new ArrayList<>()).add(cf);
+                }
+            }
+
+            // 4. 组装
+            List<PersonFaceData> resultList = new ArrayList<>(psnIds.size());
+            for (String pid : psnIds) {
+                List<CachedFaceFeature> feats = psnToFeatures.get(pid);
+                if (feats != null && !feats.isEmpty()) {
+                    Set<String> grp = psnToGroups.get(pid);
+                    if ((feats != null && !feats.isEmpty()) || allPerson) {
+                        PersonFaceData data = new PersonFaceData();
+                        data.setPersonId(pid);
+                        data.setFeatures(feats);
+                        data.setGroupIds(grp != null ? grp.toArray(new String[0]) : new String[]{"DEFAULT_GROUP"});
+                        resultList.add(data);
+                    }
+                }
+            }
+
+            // 5. 写入缓存 (IO)
+            if (!resultList.isEmpty()) {
+                faceCacheService.loadFeatures(resultList);
+                long current = totalCounter.addAndGet(resultList.size());
+                if (current % LOG_INTERVAL < BATCH_SIZE) {
+                    ServerConfigOptimizer.MemoryStats currentMemory = configOptimizer.getCurrentMemoryStats();
+                    log.info("分片 {}: 已加载 {} 人... [{}]", shardIndex, current, currentMemory);
+                }
+            }
+
+        } catch (Exception e) {
+            log.error("批次处理失败", e);
         }
-        // 及时释放特征列表内存
-        features.clear();
-        features = null;
-
-        // 4. 构建最终缓存对象
-        List<PersonFaceData> personDataList = new ArrayList<>((int)(psnIds.size() / 0.75) + 1);
-        for (String psnId : psnIds) {
-            List<CachedFaceFeature> featList = psnToFeatures.get(psnId);
-            if (featList == null || featList.isEmpty()) {
-                continue;
-            }
-
-            Set<String> grpSet = psnToGroups.get(psnId);
-            if ((grpSet == null || grpSet.isEmpty()) && !allPerson) {
-                continue;
-            }
-
-            if (grpSet == null) {
-                grpSet = new HashSet<>();
-                grpSet.add(DEFAULT_GROUP_ID);
-            }else if (grpSet.isEmpty()) {
-                grpSet.add(DEFAULT_GROUP_ID);
-            }
-
-            PersonFaceData data = new PersonFaceData();
-            data.setPersonId(psnId);
-            data.setFeatures(featList);
-            data.setGroupIds(grpSet.toArray(new String[0]));
-
-            personDataList.add(data);
-        }
-
-        // 5. 写入 Hazelcast 缓存 (网络IO)
-        if (!personDataList.isEmpty()) {
-            faceCacheService.loadFeatures(personDataList);
-
-            long currentTotal = totalCounter.addAndGet(personDataList.size());
-            if (currentTotal % LOG_INTERVAL < BATCH_SIZE) {
-                MemoryStats currentMemory = configOptimizer.getCurrentMemoryStats();
-                log.info("分片 {}: 已加载 {} 人... [{}]", shardIndex, currentTotal, currentMemory);
-            }
-        }
-
-        // 清理临时数据结构释放内存
-        personDataList.clear();
-        psnToFeatures.clear();
-        psnToGroups.clear();
-        personDataList = null;
-        psnToFeatures = null;
-        psnToGroups = null;
-
     }
 
     @Override
     public void destroy() {
         if (loaderExecutor != null) {
-            log.info("正在关闭数据加载线程池...");
-            loaderExecutor.shutdown();
+            loaderExecutor.shutdownNow();
         }
     }
 
