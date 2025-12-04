@@ -12,25 +12,28 @@ import org.springframework.util.CollectionUtils;
 import java.io.Serializable;
 import java.util.*;
 
-/**
- * 优化后的 Hazelcast 分布式聚合器
- */
 @Slf4j
 public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonFaceData>, List<CompareResult>>, Serializable {
 
     private static final long serialVersionUID = 1L;
+
+    // 汉明距离阈值 - 越小筛选越严格，性能越好但可能漏检
     private static final int HAMMING_DIST_THRESHOLD = 50;
 
     private transient List<float[]> inputFloatFeatures;
     private transient List<int[]> inputBinaryFeatures;
     private transient String[] inputFaceIdStrings;
 
+    // 动态剪枝阈值 - 记录当前TopN堆中的最低分
+    private transient float dynamicThreshold = -1.0f;
+
     private CompareParams compareParams;
     private PriorityQueue<CompareResult> localTopNHeap;
 
     public FaceRecogAggregator(CompareParams params) {
         this.compareParams = params;
-        this.localTopNHeap = new PriorityQueue<>(params.getTopN(), new CompareResultScoreComparator());
+        // 预分配足够容量，避免扩容
+        this.localTopNHeap = new PriorityQueue<>(params.getTopN() + 1, new CompareResultScoreComparator());
     }
 
     // 初始化输入特征（搜索查询特征）
@@ -91,27 +94,27 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
         // 用于收集通过阈值的详细匹配结果（懒初始化）
         List<CompareResult.compareDetails> matchedDetails = null;
 
-        int inputSize = inputBinaryFeatures.size();
+        final int inputSize = inputBinaryFeatures.size();
+
+        // 获取当前有效阈值（用户阈值 vs 动态剪枝阈值，取较大者）
+        final float effectiveThreshold = Math.max(compareParams.getThreshold(), dynamicThreshold);
 
         for (CachedFaceFeature candidate : features) {
-            // 1. 直接获取预计算特征
-            int[] candidateBinaryFeat = candidate.getBinaryFeature();
-            if (candidateBinaryFeat == null) {
-                candidateBinaryFeat = Face303JavaCalcuater.getBinaFeat(candidate.getFeatureData());
-                if (candidateBinaryFeat == null) continue;
-            }
+            // 1. 直接获取预计算特征（优化：避免空检查分支预测失败）
+            final int[] candidateBinaryFeat = candidate.getBinaryFeature();
+            final float[] candidateFloatFeat = candidate.getFeatureVector();
 
-            float[] candidateFloatFeat = candidate.getFeatureVector();
-            if (candidateFloatFeat == null) {
-                candidateFloatFeat = Face303JavaCalcuater.toFloatArray(candidate.getFeatureData());
-                if (candidateFloatFeat == null) continue;
+            // 快速跳过无效特征
+            if (candidateBinaryFeat == null || candidateBinaryFeat.length != 4 ||
+                    candidateFloatFeat == null || candidateFloatFeat.length == 0) {
+                continue;
             }
 
             // 2. 与所有输入特征比对
             for (int i = 0; i < inputSize; i++) {
-                int[] inputBFeat = inputBinaryFeatures.get(i);
+                final int[] inputBFeat = inputBinaryFeatures.get(i);
 
-                // 2.1 汉明距离粗筛 (位运算，极快)
+                // 2.1 汉明距离粗筛 (位运算，极快，~5ns)
                 boolean isSimilar = Face303JavaCalcuater.isBinaFeatSimilar(
                         inputBFeat[0], inputBFeat[1], inputBFeat[2], inputBFeat[3],
                         candidateBinaryFeat[0], candidateBinaryFeat[1], candidateBinaryFeat[2], candidateBinaryFeat[3],
@@ -119,8 +122,8 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
                 );
 
                 if (isSimilar) {
-                    // 2.2 余弦相似度精筛 (浮点运算)
-                    float similarity = Face303JavaCalcuater.compare(inputFloatFeatures.get(i), candidateFloatFeat);
+                    // 2.2 余弦相似度精筛 (浮点运算，~50ns)
+                    final float similarity = Face303JavaCalcuater.compare(inputFloatFeatures.get(i), candidateFloatFeat);
 
                     // 记录该人员的最佳分数
                     if (similarity > maxPersonScore) {
@@ -128,10 +131,10 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
                         maxPersonFaceId = candidate.getFaceId();
                     }
 
-                    // 2.3 只有超过阈值，才创建详情对象
-                    if (similarity >= compareParams.getThreshold()) {
+                    // 2.3 动态剪枝：只有超过有效阈值，才创建详情对象
+                    if (similarity >= effectiveThreshold) {
                         if (matchedDetails == null) {
-                            matchedDetails = new ArrayList<>();
+                            matchedDetails = new ArrayList<>(4); // 预分配小容量
                         }
                         CompareResult.compareDetails detail = new CompareResult.compareDetails();
                         detail.setFaceId1(inputFaceIdStrings[i]);
@@ -144,8 +147,8 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
             }
         }
 
-        // 3. 更新局部堆
-        if (matchedDetails != null && !matchedDetails.isEmpty()) {
+        // 3. 更新局部堆（只有超过用户阈值才入堆）
+        if (matchedDetails != null && !matchedDetails.isEmpty() && maxPersonScore >= compareParams.getThreshold()) {
             CompareResult result = new CompareResult();
             result.setPsnTmplNo(personData.getPersonId());
             result.setScore(maxPersonScore);
@@ -165,6 +168,14 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
             if (head != null && result.getScore() > head.getScore()) {
                 localTopNHeap.poll();
                 localTopNHeap.add(result);
+            }
+        }
+
+        // 更新动态剪枝阈值
+        if (localTopNHeap.size() >= compareParams.getTopN()) {
+            CompareResult minInHeap = localTopNHeap.peek();
+            if (minInHeap != null) {
+                dynamicThreshold = minInHeap.getScore();
             }
         }
     }
@@ -192,6 +203,7 @@ public class FaceRecogAggregator implements Aggregator<Map.Entry<String, PersonF
         for (CompareResult r : results) {
             fillMinMaxStats(r);
         }
+
         return results;
     }
 
